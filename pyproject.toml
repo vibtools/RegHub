@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reghub"
+version = "0.1.0"
+description = "Registry platform for YGIT templates"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { text = "Proprietary" }
+authors = [{ name = "YGIT" }]
+dependencies = [
+  "fastapi==0.139.2",
+  "uvicorn[standard]>=0.35,<1",
+  "sqladmin==0.29.0",
+  "SQLAlchemy[asyncio]==2.0.51",
+  "asyncpg>=0.30,<1",
+  "alembic==1.18.5",
+  "pydantic-settings==2.14.2",
+  "Authlib==1.7.2",
+  "PyGithub==2.9.1",
+  "httpx>=0.28,<1",
+  "python-slugify>=8,<9",
+  "python-multipart>=0.0.20,<1",
+  "itsdangerous>=2.2,<3",
+  "jinja2>=3.1,<4",
+]
+
+[project.optional-dependencies]
+dev = [
+  "aiosqlite>=0.21,<1",
+  "pytest>=8.4,<10",
+  "pytest-asyncio>=1.1,<2",
+  "pytest-cov>=6,<8",
+  "ruff>=0.12,<1",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "SIM", "RUF"]
+ignore = ["S101", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]

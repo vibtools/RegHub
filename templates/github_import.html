@@ -1,0 +1,37 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+<div class="row">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">GitHub metadata import</h3></div>
+      <div class="card-body">
+        {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+        {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+        <form method="post" autocomplete="off">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div class="mb-3">
+            <label class="form-label">Repository URL</label>
+            <input class="form-control" type="url" name="repository_url" required maxlength="500"
+              placeholder="https://github.com/owner/repository" pattern="https://github\\.com/.+/.+">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Category</label>
+            <select class="form-select" name="category_id">
+              <option value="">Not assigned</option>
+              {% for item in categories %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Provider</label>
+            <select class="form-select" name="provider_id">
+              <option value="">Not assigned</option>
+              {% for item in providers %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-primary" type="submit">Import as Draft</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
