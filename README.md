@@ -1,5 +1,7 @@
 # RegHub
 
+Current release: **v0.1.1**
+
 RegHub is the registry service for the YGIT ecosystem. It manages template metadata and
 publishes a stable read-only API for `ygit.net`. It does **not** build or deploy projects.
 
@@ -16,6 +18,8 @@ publishes a stable read-only API for `ygit.net`. It does **not** build or deploy
 - OIDC administrator login through `auth.vib.tools`
 - SQLAdmin internal registry panel
 - GitHub API metadata import without repository cloning
+- Optional server-side fine-grained GitHub PAT with clear authenticated status
+- Astro auto-detection from topics, Astro config files, and root `package.json`
 - Templates, categories, providers, and frameworks
 - Draft, published, and disabled lifecycle
 - Versioned public read-only API
@@ -61,3 +65,12 @@ GET /api/v1/frameworks
 ```
 
 Only published templates are exposed. YGIT owns all deployment behavior.
+
+## v0.1.1 production patch
+
+- Fixes the SQLAdmin Templates list crash caused by SQLAdmin 0.29 filter API changes.
+- Preserves Status, Featured, and Framework filters using supported filter objects.
+- Improves GitHub token errors and shows authenticated/unauthenticated API mode.
+- Reads a bounded root `package.json` through GitHub's API for framework detection.
+- Adds Astro detection regression coverage without cloning or executing repositories.
+- Requires no database migration and does not change existing public API paths.

@@ -14,4 +14,5 @@ class ApplicationContainer:
             allow_private=settings.github_allow_private_repositories,
         )
         adapters = AdapterRegistry([GitHubRegistryAdapter(github_client)])
+        self.github_authenticated = github_client.is_authenticated
         self.template_import_service = TemplateImportService(async_session_factory, adapters)

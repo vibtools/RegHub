@@ -4,15 +4,14 @@ from hmac import compare_digest
 from uuid import UUID
 
 from sqladmin import BaseView, ModelView, action, expose
+from sqladmin.filters import BooleanFilter, ForeignKeyFilter, StaticValuesFilter
 from sqlalchemy import select
-from starlette.requests import Request
 from starlette.datastructures import URL
+from starlette.requests import Request
 from starlette.responses import RedirectResponse
 
 from app.core.enums import TemplateStatus
 from app.core.exceptions import RegistryError
-
-logger = logging.getLogger(__name__)
 from app.database.session import async_session_factory
 from app.models.category import Category
 from app.models.framework import Framework
@@ -20,6 +19,8 @@ from app.models.import_history import ImportHistory
 from app.models.provider import Provider
 from app.models.template import Template
 from app.registry.template import TemplateService
+
+logger = logging.getLogger(__name__)
 
 
 class CategoryAdmin(ModelView, model=Category):
@@ -58,8 +59,29 @@ class TemplateAdmin(ModelView, model=Template):
         Template.updated_at,
     ]
     column_searchable_list = [Template.name, Template.slug, Template.repository_url]
-    column_sortable_list = [Template.name, Template.status, Template.stars_count, Template.updated_at]
-    column_filters = [Template.status, Template.is_featured, Template.framework_id]
+    column_sortable_list = [
+        Template.name,
+        Template.status,
+        Template.stars_count,
+        Template.updated_at,
+    ]
+    # SQLAdmin 0.29 requires filter objects rather than raw SQLAlchemy attributes.
+    # Keeping the three existing filters preserves the original admin feature set while
+    # preventing /admin/template/list from raising AttributeError(parameter_name).
+    column_filters = [
+        StaticValuesFilter(
+            Template.status,
+            values=[(status.name, status.value.title()) for status in TemplateStatus],
+            title="Status",
+        ),
+        BooleanFilter(Template.is_featured, title="Featured"),
+        ForeignKeyFilter(
+            Template.framework_id,
+            Framework.name,
+            foreign_model=Framework,
+            title="Framework",
+        ),
+    ]
     form_excluded_columns = [
         Template.created_at,
         Template.updated_at,
@@ -129,6 +151,7 @@ class GitHubImportView(BaseView):
         context: dict[str, object] = {
             "title": "Import GitHub Repository",
             "csrf_token": csrf_token,
+            "github_authenticated": self._admin_ref.app.state.container.github_authenticated,
         }
         async with async_session_factory() as session:
             context["categories"] = list(
@@ -143,19 +166,26 @@ class GitHubImportView(BaseView):
             submitted_csrf = str(form.get("csrf_token", ""))
             if not submitted_csrf or not compare_digest(submitted_csrf, csrf_token):
                 context["error"] = "The form session expired. Reload the page and try again."
-                return await self.templates.TemplateResponse(request, "github_import.html", context, status_code=400)
+                return await self.templates.TemplateResponse(
+                    request, "github_import.html", context, status_code=400
+                )
             repository_url = str(form.get("repository_url", "")).strip()
             category_raw = str(form.get("category_id", "")).strip()
             provider_raw = str(form.get("provider_id", "")).strip()
             identity = request.state.admin_identity
             try:
-                template = await self._admin_ref.app.state.container.template_import_service.import_repository(
+                import_service = self._admin_ref.app.state.container.template_import_service
+                template = await import_service.import_repository(
                     repository_url=repository_url,
                     requested_by=identity.subject,
                     category_id=UUID(category_raw) if category_raw else None,
                     provider_id=UUID(provider_raw) if provider_raw else None,
                 )
-                context["success"] = f"{template.name} was imported as a draft."
+                framework_name = template.framework.name if template.framework else "Unknown"
+                context["success"] = (
+                    f"{template.name} was imported as a draft. "
+                    f"Detected framework: {framework_name}."
+                )
                 csrf_token = secrets.token_urlsafe(32)
                 request.session["github_import_csrf"] = csrf_token
                 context["csrf_token"] = csrf_token

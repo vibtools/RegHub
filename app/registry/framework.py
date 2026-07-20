@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +24,7 @@ _FILE_MAP = {
     "astro.config.mjs": "astro",
     "astro.config.ts": "astro",
     "astro.config.js": "astro",
+    "astro.config.cjs": "astro",
     "next.config.js": "nextjs",
     "next.config.mjs": "nextjs",
     "next.config.ts": "nextjs",
@@ -33,6 +36,26 @@ _FILE_MAP = {
     "manage.py": "django",
     "dockerfile": "docker",
 }
+
+_PACKAGE_MAP = {
+    "astro": "astro",
+    "next": "nextjs",
+    "nuxt": "nuxt",
+    "@sveltejs/kit": "sveltekit",
+    "vue": "vue",
+    "react": "react",
+}
+
+
+def _package_names(package_json: dict[str, Any] | None) -> set[str]:
+    if not isinstance(package_json, dict):
+        return set()
+    names: set[str] = set()
+    for section in ("dependencies", "devDependencies", "peerDependencies"):
+        values = package_json.get(section)
+        if isinstance(values, dict):
+            names.update(str(name).casefold() for name in values)
+    return names
 
 
 class FrameworkService:
@@ -48,9 +71,19 @@ class FrameworkService:
 
     @staticmethod
     def detect_slug(repository: ImportedRepository) -> str:
+        # Explicit GitHub topics have highest priority because they are maintainer supplied.
         for topic in repository.topics:
             if topic in _FRAMEWORK_TOPIC_MAP:
                 return _FRAMEWORK_TOPIC_MAP[topic]
+
+        # package.json allows Astro/Next.js/etc. imports even when the config file has
+        # a non-standard name or is absent from the root. Astro is checked before React
+        # because Astro projects may also include React integrations.
+        packages = _package_names(repository.package_json)
+        for package_name, framework in _PACKAGE_MAP.items():
+            if package_name in packages:
+                return framework
+
         for filename, framework in _FILE_MAP.items():
             if filename in repository.root_files:
                 return framework

@@ -5,6 +5,15 @@
     <div class="card">
       <div class="card-header"><h3 class="card-title">GitHub metadata import</h3></div>
       <div class="card-body">
+        {% if github_authenticated %}
+          <div class="alert alert-success" role="status">
+            GitHub API: authenticated with the server-side GITHUB_TOKEN.
+          </div>
+        {% else %}
+          <div class="alert alert-warning" role="status">
+            GitHub API: unauthenticated mode. Public imports work, but rate limits are lower.
+          </div>
+        {% endif %}
         {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
         {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
         <form method="post" autocomplete="off">

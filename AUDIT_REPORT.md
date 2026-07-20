@@ -1,56 +1,52 @@
-# RegHub v0.1.0 — Audit Report
+# RegHub v0.1.1 — Audit Report
 
-## Scope audited
+## Baseline
 
-- FastAPI application structure and internal imports
-- SQLAlchemy models and relationship mappings
-- PostgreSQL DDL compilation
-- Alembic initial migration offline SQL generation
-- Registry SDK rules
-- GitHub URL normalization and SSRF boundary
-- Minimal manifest validation
-- Template publication invariants
-- OIDC configuration and signed administrator cookie logic
-- SQLAdmin custom GitHub import CSRF protection
-- Secret-pattern scan
-- Docker/Coolify configuration review
+The user-supplied running RegHub v0.1.0 archive was used as the authoritative baseline.
+No existing feature, endpoint, model field, migration, authentication flow, or deployment
+boundary was removed.
 
-## Automated results
+## Root cause fixed
 
-- Python compile check: PASS
-- Unit tests: 15 passed
-- ORM mapper configuration: PASS
-- PostgreSQL table DDL compilation: PASS
-- Alembic `upgrade head --sql`: PASS
-- Internal application import graph: PASS
-- SQLite model CRUD smoke test: PASS
-- Secret-pattern scan: PASS
+`/admin/template/list` failed because SQLAdmin 0.29 expects filter objects with a
+`parameter_name` attribute. v0.1.0 supplied raw SQLAlchemy attributes in `column_filters`,
+causing an `AttributeError` before the page rendered.
 
-## Security controls implemented
+v0.1.1 uses supported `StaticValuesFilter`, `BooleanFilter`, and `ForeignKeyFilter` objects
+and preserves the original Status, Featured, and Framework filters.
 
-- HTTPS-only `github.com` repository URLs
-- Credentials, custom ports, query strings, fragments, and extra path segments rejected
-- No Git clone or repository code execution
-- OIDC Authorization Code flow through Authlib with PKCE S256
-- OIDC admin-claim allowlist
-- Signed, short-lived, HttpOnly administrator cookie
-- Local redirect validation
-- Trusted-host and restricted CORS configuration
-- Security headers
-- Session-bound CSRF token for custom GitHub import
-- Draft-only imports and action-only publication
-- Manifest repository, branch, and framework consistency checks before publication
-- Production startup fails closed when OIDC or secure-cookie configuration is incomplete
+## GitHub and Astro improvements
 
-## Remaining deployment-time verification
+- Existing `GITHUB_TOKEN` support was retained and made observable in the admin import UI.
+- Bad credentials and rate-limit failures now return actionable, non-secret messages.
+- A bounded root `package.json` is read through the GitHub Contents API.
+- No repository is cloned, installed, built, or executed.
+- Astro is detected from topics, `astro.config.js/mjs/ts/cjs`, or the `astro` dependency.
+- Astro has priority over React when an Astro project uses the React integration.
 
-The following checks require the real Coolify/PostgreSQL/auth.vib.tools environment and are not reproducible inside the artifact sandbox:
+## Compatibility
 
-- Docker image build and container startup
-- Live PostgreSQL migration execution
-- OIDC discovery, callback, claim mapping, and logout behavior
-- Live GitHub API import and rate-limit behavior
-- Coolify reverse-proxy headers, HTTPS, health checks, and backup configuration
-- End-to-end YGIT API consumption
+- Database migration: none.
+- Existing migration history: unchanged.
+- Existing database data: preserved.
+- Keycloak/OIDC: unchanged.
+- Public API paths and schemas: unchanged.
+- Template manifest schema: unchanged at v1.0.
+- Coolify Dockerfile and entrypoint behavior: unchanged.
 
-These are documented in `docs/09_COOLIFY_DEPLOYMENT.md` and `docs/11_RELEASE_CHECKLIST.md`.
+## Automated verification
+
+- Unit and integration tests: 22 passed.
+- SQLAdmin Template list regression: passed.
+- SQLAdmin Status and Featured filter requests: passed.
+- Astro package detection tests: passed.
+- GitHub PAT wiring test: passed.
+- Package metadata size-bound tests: passed.
+- Python compile check: passed.
+- Targeted Ruff checks for all changed logic: passed.
+
+## Environment limitation
+
+A Docker daemon and the user's live Coolify, PostgreSQL, Keycloak, and GitHub environment
+were not available in the artifact runtime. Production verification steps are documented in
+`docs/12_V0.1.1_UPDATE.md`.

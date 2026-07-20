@@ -18,6 +18,7 @@ class ImportedRepository:
     stars_count: int
     forks_count: int
     root_files: frozenset[str]
+    package_json: dict[str, Any] | None
     metadata: dict[str, Any]
 
 

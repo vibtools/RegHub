@@ -18,14 +18,23 @@ def parse_github_repository_url(repository_url: str) -> tuple[str, str, str]:
     if parsed.scheme != "https" or parsed.hostname not in {"github.com", "www.github.com"}:
         raise ValidationError("Repository URL must use HTTPS and the github.com host")
     if parsed.query or parsed.fragment or parsed.username or parsed.password or parsed.port:
-        raise ValidationError("Repository URL cannot contain credentials, ports, query, or fragment")
+        raise ValidationError(
+            "Repository URL cannot contain credentials, ports, query, or fragment"
+        )
     parts = [part for part in parsed.path.split("/") if part]
     if len(parts) != 2:
-        raise ValidationError("Repository URL must have the form https://github.com/owner/repository")
+        raise ValidationError(
+            "Repository URL must have the form https://github.com/owner/repository"
+        )
     owner, repository = parts
     if repository.endswith(".git"):
         repository = repository[:-4]
-    if not owner or not repository or not _GITHUB_PART.fullmatch(owner) or not _GITHUB_PART.fullmatch(repository):
+    if (
+        not owner
+        or not repository
+        or not _GITHUB_PART.fullmatch(owner)
+        or not _GITHUB_PART.fullmatch(repository)
+    ):
         raise ValidationError("Repository owner or name contains unsupported characters")
     normalized = f"https://github.com/{owner}/{repository}"
     return owner, repository, normalized
@@ -54,5 +63,6 @@ class GitHubRegistryAdapter(RegistryAdapter):
             stars_count=data.stars_count,
             forks_count=data.forks_count,
             root_files=data.root_files,
+            package_json=data.package_json,
             metadata=data.raw,
         )
