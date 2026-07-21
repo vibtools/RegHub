@@ -1,3 +1,4 @@
+import json
 import math
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -103,6 +104,24 @@ class TemplateImportService:
                 f"screenshots discovered: {len(imported.screenshot_urls)}"
             )
             await self._progress(progress, 35, discovery_summary, "debug")
+            root_sample = sorted(imported.root_files)[:30]
+            await self._progress(
+                progress,
+                35,
+                "root_entries="
+                + json.dumps(root_sample, ensure_ascii=False, separators=(",", ":")),
+                "debug",
+            )
+            if imported.screenshot_urls:
+                await self._progress(
+                    progress,
+                    35,
+                    "media_candidates="
+                    + json.dumps(
+                        imported.screenshot_urls[:10], ensure_ascii=False, separators=(",", ":")
+                    ),
+                    "debug",
+                )
             await self._progress(progress, 36, "[4/9] Repository metadata received successfully")
             template = await self.import_imported_repository(
                 imported=imported,
@@ -158,6 +177,31 @@ class TemplateImportService:
                 "debug",
             )
             await self._progress(progress, 52, f"Framework detected: {analysis.framework_name}")
+            await self._progress(
+                progress,
+                53,
+                (
+                    "analysis="
+                    + json.dumps(
+                        {
+                            "framework": analysis.framework_slug,
+                            "framework_version": analysis.framework_version,
+                            "language": analysis.language,
+                            "package_manager": analysis.package_manager,
+                            "build_command": analysis.build_command,
+                            "start_command": analysis.start_command,
+                            "quality_score": analysis.quality_score,
+                            "difficulty": analysis.difficulty,
+                            "use_case": analysis.use_case,
+                            "tag_count": len(analysis.tags),
+                            "screenshot_count": len(analysis.screenshots),
+                        },
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                ),
+                "debug",
+            )
             if self._ai_enricher and self._ai_enricher.enabled:
                 await self._progress(progress, 56, "Running optional AI metadata enrichment")
                 analysis = await self._ai_enricher.enrich(imported, analysis)
@@ -222,6 +266,13 @@ class TemplateImportService:
                     name=analysis.title,
                     analysis=analysis,
                     schema_version="2.0",
+                )
+                await self._progress(
+                    progress,
+                    74,
+                    "manifest="
+                    + json.dumps(manifest.as_dict(), ensure_ascii=False, separators=(",", ":")),
+                    "debug",
                 )
                 thumbnail = (
                     analysis.screenshots[0]
@@ -515,6 +566,26 @@ class TemplateSyncService:
             template = await session.get(Template, identifier)
             if template is None:
                 raise NotFoundError("Template not found")
+            await self._progress(
+                progress,
+                10,
+                "template="
+                + json.dumps(
+                    {
+                        "id": str(template.id),
+                        "name": template.name,
+                        "slug": template.slug,
+                        "status": template.status.value,
+                        "adapter": template.repository_adapter,
+                        "repository_url": template.repository_url,
+                        "current_framework_version": template.framework_version,
+                        "current_quality_score": template.quality_score,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                "debug",
+            )
             history = SyncHistory(
                 template=template,
                 adapter=template.repository_adapter,
@@ -527,6 +598,7 @@ class TemplateSyncService:
             history_id = history.id
             repository_url = template.repository_url
             adapter_name = template.repository_adapter
+            await self._progress(progress, 14, f"sync_history_id={history_id}", "debug")
 
         try:
             if adapter_name not in self._adapters.names:
@@ -535,9 +607,51 @@ class TemplateSyncService:
                 progress, 20, f"Fetching latest metadata from {adapter_name.title()}"
             )
             imported = await self._adapters.get(adapter_name).import_repository(repository_url)
+            await self._progress(
+                progress,
+                32,
+                "source_metadata="
+                + json.dumps(
+                    {
+                        "external_id": imported.external_id,
+                        "default_branch": imported.default_branch,
+                        "source_revision": imported.source_revision,
+                        "source_updated_at": imported.source_updated_at.isoformat()
+                        if imported.source_updated_at
+                        else None,
+                        "root_entry_count": len(imported.root_files),
+                        "topic_count": len(imported.topics),
+                        "screenshot_count": len(imported.screenshot_urls),
+                        "stars": imported.stars_count,
+                        "forks": imported.forks_count,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                "debug",
+            )
             await self._progress(progress, 38, "Analyzing latest repository metadata")
             analysis = self._analyzer.analyze(imported)
             await self._progress(progress, 48, f"Framework detected: {analysis.framework_name}")
+            await self._progress(
+                progress,
+                50,
+                "analysis="
+                + json.dumps(
+                    {
+                        "framework": analysis.framework_slug,
+                        "framework_version": analysis.framework_version,
+                        "language": analysis.language,
+                        "package_manager": analysis.package_manager,
+                        "quality_score": analysis.quality_score,
+                        "screenshot_count": len(analysis.screenshots),
+                        "tag_count": len(analysis.tags),
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                "debug",
+            )
             if self._ai_enricher and self._ai_enricher.enabled:
                 await self._progress(progress, 52, "Running optional AI metadata enrichment")
                 analysis = await self._ai_enricher.enrich(imported, analysis)
@@ -551,6 +665,13 @@ class TemplateSyncService:
                     raise RuntimeError("Template or sync history disappeared during sync")
                 framework = await FrameworkService.resolve(session, analysis.framework_slug)
                 changes = self._changes(template, imported, analysis)
+                await self._progress(
+                    progress,
+                    62,
+                    "detected_changes="
+                    + json.dumps(changes, ensure_ascii=False, separators=(",", ":"), default=str),
+                    "debug",
+                )
                 # Preserve curated identity, category, publication state, and featured flag.
                 template.default_branch = imported.default_branch
                 template.homepage_url = imported.homepage_url
@@ -594,6 +715,20 @@ class TemplateSyncService:
                 if changes["screenshot_count"]["before"] == changes["screenshot_count"]["after"]:
                     changes.pop("screenshot_count")
                 template.screenshots = combined_screenshots
+                await self._progress(
+                    progress,
+                    72,
+                    "media_merge="
+                    + json.dumps(
+                        {
+                            "preserved_manual": len(preserved_urls),
+                            "source_discovered": len(analysis.screenshots),
+                            "combined": len(combined_screenshots),
+                        },
+                        separators=(",", ":"),
+                    ),
+                    "debug",
+                )
                 template.thumbnail_url = template.thumbnail_url or next(
                     (url for url in combined_screenshots if url.startswith("https://")), None
                 )
@@ -649,13 +784,37 @@ class TemplateSyncService:
                 history.changes = changes
                 history.completed_at = now
                 await self._progress(
-                    progress, 88, "Committing sync history, assets and version snapshot"
+                    progress, 88, "BEGIN COMMIT sync history, assets and version snapshot"
                 )
                 await session.commit()
                 await session.refresh(template)
+                await self._progress(
+                    progress,
+                    94,
+                    "COMMIT complete "
+                    + json.dumps(
+                        {
+                            "template_id": str(template.id),
+                            "sync_history_id": str(history_id),
+                            "framework": framework.slug,
+                            "framework_version": template.framework_version,
+                            "quality_score": template.quality_score,
+                            "asset_count": len(template.screenshots),
+                            "change_count": len(changes),
+                        },
+                        separators=(",", ":"),
+                    ),
+                    "debug",
+                )
                 await self._progress(progress, 96, "Source synchronization completed")
                 return template
         except Exception as exc:
+            await self._progress(
+                progress,
+                96,
+                f"SYNC FAILED exception={exc.__class__.__name__} reason={exc}",
+                "error",
+            )
             async with self._session_factory() as session:
                 history = await session.get(SyncHistory, history_id)
                 if history:

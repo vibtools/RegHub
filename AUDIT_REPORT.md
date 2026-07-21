@@ -1,64 +1,48 @@
-# RegHub v0.2.3 Operations & API Access — Production Audit
+# RegHub v0.2.3.1 Settings, API Check & Terminal Hotfix — Production Audit
 
 ## Baseline and zero-freedom compatibility
 
-- Built from the live v0.2.2.1 UI & Operations Hotfix.
-- No public API path, OIDC route, SQLAdmin model page, template field, provider/media capability,
-  manifest behavior, operation record, runtime integration, Docker entrypoint, or deployment
-  boundary was removed.
-- Existing template IDs, slugs, publication states, PostgreSQL records, Keycloak values, and Coolify
-  variables remain compatible.
+- Built directly from the live v0.2.3 Operations & API Access source archive.
+- No existing endpoint, OIDC route, SQLAdmin model view, feature flag, integration setting, encrypted
+  credential, service token, block rule, operation history, template record, manifest, migration,
+  Docker entrypoint, Coolify variable, or deployment boundary was removed.
+- Existing database revision remains `20260721_0005`; this hotfix requires no migration.
 
-## Corrected behavior
+## Forensic findings and corrections
 
-- Duplicate repository imports now terminate as `skipped` with a linked existing template and a
-  successful Import History no-change record.
-- Operation logs include provider, analyzer, resource resolution, transaction, and safe exception
-  details in a compact terminal presentation.
-- Terminal operation history can be safely cleared without deleting queued or running work.
-- Asset Gallery and registry tables include productive search, filters, and sorting.
+### Settings tab reset
 
-## Runtime API security
+HTML fragments are not submitted with form POST requests. v0.2.3 depended on the URL fragment and
+browser session storage, so after an action the server rendered the default Feature controls pane.
+v0.2.3.1 records the originating pane in a hidden `return_tab` field, validates it server-side, and
+renders the same pane after success or failure.
 
-- Development and token-protected Live modes are database-backed and switch immediately.
-- Service tokens are scoped, expirable, enable/disable capable, and stored only as HMAC-SHA256
-  digests. Raw values are shown once.
-- Live API requests accept Bearer or `X-RegHub-Token` authentication.
-- IP, CIDR, hostname, localhost, and documented private-network aliases can be blocked at runtime.
-- Health/readiness and authenticated administrator recovery surfaces remain available.
-- The Settings API checker uses a short-lived in-memory credential and does not persist or display a
-  permanent secret.
+### API check routing failure
 
-## Additive database impact
+Inside a SQLAdmin custom view, `request.app` refers to the mounted SQLAdmin Starlette application,
+not the root FastAPI application. The v0.2.3 checker sent `/api/v1/*` requests to that sub-app, whose
+error template then failed to resolve `admin:statics`. v0.2.3.1 explicitly uses the root application
+stored on the Admin instance and returns structured per-route results.
 
-Migration `20260721_0005_api_access_operations` creates three tables only:
+### Terminal spacing and diagnostics
 
-- `api_access_policies`
-- `api_service_tokens`
-- `api_block_rules`
+The previous log markup placed an optional data element in an already occupied CSS grid column. The
+browser created an implicit second row, producing large blank gaps. The hotfix uses one compact row
+with a single content cell and inline structured diagnostics. Import and sync operations also record
+redacted input context, source metadata, analyzer results, change sets, media counts, transaction
+stages, elapsed time, exception stage, and bounded traceback data.
 
-No existing schema object or data is removed or renamed.
+## API endpoint management
+
+- Dedicated endpoint registry lists every supported v1 route.
+- Each row has a no-reload **Check** action.
+- Each row has a **Use** action that copies URL, method, scope, Bearer header, PowerShell example, and
+  curl example.
+- Dynamic template routes use a published template when available and are marked unavailable rather
+  than falsely failed when no published template exists.
+- Internal checks use short-lived in-memory tokens and never expose stored service-token secrets.
 
 ## Automated verification
 
-Final release verification results are recorded in `RELEASE_VERIFICATION_V0.2.3.txt` and the
-external release audit artifact. Live Coolify, Keycloak, reverse-proxy client-IP forwarding, and
-real YGIT token consumption must be verified after deployment.
-
-## Final automated verification
-
-- Automated tests: **85 passed**
-- Application statement coverage: **69%**
-- Ruff lint and formatting: **PASS**
-- Python compilation: **PASS**
-- Jinja compilation: **PASS** — 10 templates
-- PostgreSQL ORM DDL compilation: **PASS** — 16 tables
-- Alembic offline upgrade through `20260721_0005`: **PASS**
-- Full FastAPI lifespan, Development Mode, and Live Mode token smoke tests: **PASS**
-- Wheel and source distribution build: **PASS**
-- Replace-ready ZIP re-extract and full retest: **PASS** — 85 passed
-- Dependency integrity and secret-pattern scan: **PASS**
-- Baseline source files removed: **0**
-
-One non-blocking Starlette TestClient deprecation warning remains in the test dependency and is not
-a production runtime error.
+Final evidence is recorded in `RELEASE_VERIFICATION_V0.2.3.1.txt`. Browser behavior through the live
+Coolify reverse proxy must still be verified after deployment.

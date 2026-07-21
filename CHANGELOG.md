@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.3.1 - 2026-07-21
+
+### Settings and API verification hotfix
+
+- Preserved the active Settings tab after every runtime action, validation error, token change, integration update, and API policy update.
+- Repaired in-application API verification to call the root FastAPI application instead of the mounted SQLAdmin sub-application.
+- Added a dedicated API endpoint registry with per-route asynchronous Check and secure Use/copy instructions.
+- Added checks for health, readiness, capabilities, catalog, resources, facets, change feed, manifest, assets, and freshness routes.
+- Expanded import/sync operation diagnostics with redacted input context, source metadata, analyzer output, change sets, media counts, transaction details, elapsed time, exception stage, and bounded traceback.
+- Rebuilt terminal log rows as compact single-row entries and removed the empty data grid row that caused excessive vertical spacing.
+- Added no database migration and removed no existing endpoint, feature, setting, credential, operation, template, or deployment behavior.
+
 ## 0.2.3 - 2026-07-21
 
 ### Operations correctness and diagnostics

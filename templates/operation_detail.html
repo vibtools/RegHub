@@ -62,7 +62,7 @@
         <div class="card-body">
           <div id="logOutput" class="reghub-log-panel" role="log" aria-live="polite" aria-label="Operation debug logs">
             {% for item in operation.logs %}
-            <div class="reghub-log-line" data-sequence="{{ item.sequence }}" data-level="{{ item.level }}"><span class="reghub-log-time">{{ item.created_at.strftime('%H:%M:%S.%f')[:-3] }}</span><span class="reghub-log-level">{{ item.level|upper }}</span><span class="reghub-log-message">{{ item.message }}</span>{% if item.data %}<span class="reghub-log-data">{{ item.data | tojson }}</span>{% endif %}</div>
+            <div class="reghub-log-line" data-sequence="{{ item.sequence }}" data-level="{{ item.level }}"><span class="reghub-log-time">{{ item.created_at.strftime('%H:%M:%S.%f')[:-3] }}</span><span class="reghub-log-level">{{ item.level|upper }}</span><span class="reghub-log-content"><span class="reghub-log-message">{{ item.message }}</span>{% if item.data %}<code class="reghub-log-data">{{ item.data | tojson }}</code>{% endif %}</span></div>
             {% else %}
             <div id="emptyLogMessage" class="text-secondary">No logs have been recorded yet. Waiting for the operation runner…</div>
             {% endfor %}
@@ -209,12 +209,16 @@
     line.dataset.sequence = String(sequence || lastSequence);
     line.dataset.level = data.level || 'info';
     const created = data.created_at ? new Date(data.created_at).toLocaleTimeString([], {hour12:false, fractionalSecondDigits:3}) : '--:--:--';
-    const detail = data.data ? ` ${JSON.stringify(data.data)}` : '';
-    line.innerHTML = `<span class="reghub-log-time"></span><span class="reghub-log-level"></span><span class="reghub-log-message"></span><span class="reghub-log-data"></span>`;
+    line.innerHTML = `<span class="reghub-log-time"></span><span class="reghub-log-level"></span><span class="reghub-log-content"><span class="reghub-log-message"></span></span>`;
     line.querySelector('.reghub-log-time').textContent = created;
     line.querySelector('.reghub-log-level').textContent = String(data.level || 'info').toUpperCase();
     line.querySelector('.reghub-log-message').textContent = data.message || '';
-    line.querySelector('.reghub-log-data').textContent = detail;
+    if (data.data && Object.keys(data.data).length) {
+      const detail = document.createElement('code');
+      detail.className = 'reghub-log-data';
+      detail.textContent = JSON.stringify(data.data);
+      line.querySelector('.reghub-log-content').appendChild(detail);
+    }
     output.appendChild(line);
     output.scrollTop = output.scrollHeight;
   }
@@ -318,7 +322,13 @@
   }
 
   copyButton.addEventListener('click', async () => {
-    const text = Array.from(output.querySelectorAll('.reghub-log-line')).map(element => element.textContent).join('\n');
+    const text = Array.from(output.querySelectorAll('.reghub-log-line')).map(element => {
+      const time = element.querySelector('.reghub-log-time')?.textContent?.trim() || '';
+      const level = element.querySelector('.reghub-log-level')?.textContent?.trim() || '';
+      const message = element.querySelector('.reghub-log-message')?.textContent?.trim() || '';
+      const detail = element.querySelector('.reghub-log-data')?.textContent?.trim() || '';
+      return `${time} [${level}] ${message}${detail ? ` ${detail}` : ''}`.trim();
+    }).join('\n');
     try {
       await copyWithFallback(text);
       copyButton.textContent = 'Copied';

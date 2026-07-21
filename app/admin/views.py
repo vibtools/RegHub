@@ -40,6 +40,7 @@ from app.models.template import Template
 from app.models.template_asset import TemplateAsset
 from app.models.template_version import TemplateVersion
 from app.registry.media import TemplateAssetService
+from app.runtime.api_catalog import endpoint_by_key, endpoint_rows
 
 logger = logging.getLogger(__name__)
 _TERMINAL_OPERATION_VALUES = {
@@ -48,6 +49,27 @@ _TERMINAL_OPERATION_VALUES = {
     OperationStatus.CANCELLED.value,
     OperationStatus.SKIPPED.value,
 }
+_SETTINGS_PANES = {"features-pane", "integrations-pane", "api-manage-pane", "custom-api-pane"}
+_SETTINGS_ACTION_PANES = {
+    "save_features": "features-pane",
+    "save_integration": "integrations-pane",
+    "remove_integration": "integrations-pane",
+    "reload_runtime": "features-pane",
+    "save_api_mode": "api-manage-pane",
+    "create_api_token": "api-manage-pane",
+    "toggle_api_token": "api-manage-pane",
+    "delete_api_token": "api-manage-pane",
+    "add_block_rule": "api-manage-pane",
+    "update_block_rule": "api-manage-pane",
+    "delete_block_rule": "api-manage-pane",
+}
+
+
+def _settings_pane(value: object, action_name: str = "") -> str:
+    candidate = str(value or "").strip().removeprefix("#")
+    if candidate in _SETTINGS_PANES:
+        return candidate
+    return _SETTINGS_ACTION_PANES.get(action_name, "features-pane")
 
 
 def _safe_admin_return_url(request: Request, default: str = "/admin/template/list") -> str:
@@ -731,7 +753,15 @@ class OperationsConsoleView(_AdminBaseView):
             "=" * 88,
         ]
         lines.extend(
-            f"{item.created_at.isoformat()} [{item.level.upper()}] {item.message}"
+            (
+                f"{item.created_at.isoformat()} [{item.level.upper()}] {item.message}"
+                + (
+                    " "
+                    + json.dumps(item.data, ensure_ascii=False, separators=(",", ":"), default=str)
+                    if item.data
+                    else ""
+                )
+            )
             for item in operation.logs
         )
         return PlainTextResponse(
@@ -779,11 +809,13 @@ class SettingsView(_AdminBaseView):
         success: str | None = None
         error: str | None = None
         new_api_token: str | None = None
+        active_pane = _settings_pane(request.query_params.get("tab"))
         if request.method == "POST":
             form = await request.form()
+            action_name = str(form.get("action", ""))
+            active_pane = _settings_pane(form.get("return_tab"), action_name)
             try:
                 self._validate_csrf(form, csrf_token)
-                action_name = str(form.get("action", ""))
                 identity = request.state.admin_identity.subject
                 if action_name == "save_features":
                     features = await container.runtime_settings.feature_rows()
@@ -914,6 +946,18 @@ class SettingsView(_AdminBaseView):
         grouped_features: dict[str, list[object]] = {}
         for feature in features:
             grouped_features.setdefault(feature.category, []).append(feature)
+
+        published_slug: str | None = None
+        session_factory = getattr(container, "session_factory", None)
+        if session_factory is not None:
+            async with session_factory() as session:
+                published_slug = await session.scalar(
+                    select(Template.slug)
+                    .where(Template.status == TemplateStatus.PUBLISHED)
+                    .order_by(Template.updated_at.desc())
+                    .limit(1)
+                )
+        api_endpoint_rows = endpoint_rows(published_slug)
         return await self.templates.TemplateResponse(
             request,
             "settings.html",
@@ -929,6 +973,9 @@ class SettingsView(_AdminBaseView):
                 "api_block_rules": await api_access.block_rule_rows() if api_access else [],
                 "api_scopes": api_access.SCOPES if api_access else [],
                 "new_api_token": new_api_token,
+                "active_pane": active_pane,
+                "api_endpoint_rows": api_endpoint_rows,
+                "published_template_slug": published_slug,
             },
         )
 
@@ -937,51 +984,123 @@ class SettingsView(_AdminBaseView):
         form = await request.form()
         self._validate_csrf(form, self._csrf(request, "settings_csrf"))
         container = self._admin_ref.app.state.container
-        token = container.api_access.issue_check_token()
+        api_access = getattr(container, "api_access", None)
+        if api_access is None:
+            raise ValidationError("API access management is unavailable")
+
+        requested_key = str(form.get("endpoint_id", "")).strip()
+        requested_endpoint = endpoint_by_key(requested_key) if requested_key else None
+        if requested_key and requested_endpoint is None:
+            raise ValidationError("Unknown API endpoint check")
+
+        published_slug: str | None = None
+        session_factory = getattr(container, "session_factory", None)
+        if session_factory is not None:
+            async with session_factory() as session:
+                published_slug = await session.scalar(
+                    select(Template.slug)
+                    .where(Template.status == TemplateStatus.PUBLISHED)
+                    .order_by(Template.updated_at.desc())
+                    .limit(1)
+                )
+
+        definitions = (
+            [requested_endpoint]
+            if requested_endpoint
+            else [endpoint_by_key(str(item["key"])) for item in endpoint_rows(published_slug)]
+        )
+        definitions = [item for item in definitions if item is not None]
+        token = api_access.issue_check_token()
         import httpx
 
-        paths = [
-            "/api/v1/health",
-            "/api/v1/ready",
-            "/api/v1/capabilities",
-            "/api/v1/templates?page=1&page_size=1",
-            "/api/v1/categories",
-            "/api/v1/providers",
-            "/api/v1/frameworks",
-            "/api/v1/facets",
-        ]
-        results = []
-        transport = httpx.ASGITransport(app=request.app)
+        results: list[dict[str, object]] = []
+        root_app = self._admin_ref.app
+        transport = httpx.ASGITransport(app=root_app, raise_app_exceptions=False)
+        base_url = f"{request.url.scheme}://{request.url.netloc}"
         async with httpx.AsyncClient(
             transport=transport,
-            base_url=f"{request.url.scheme}://{request.url.netloc}",
+            base_url=base_url,
             timeout=15,
+            follow_redirects=False,
         ) as client:
-            for path in paths:
+            for endpoint in definitions:
+                path = endpoint.concrete_path(published_slug)
+                if path is None:
+                    results.append(
+                        {
+                            "endpoint_id": endpoint.key,
+                            "name": endpoint.name,
+                            "path": endpoint.path_template,
+                            "method": endpoint.method,
+                            "scope": endpoint.scope,
+                            "status": "SKIP",
+                            "ok": False,
+                            "skipped": True,
+                            "duration_ms": 0,
+                            "body": "Publish at least one template to check this dynamic endpoint.",
+                        }
+                    )
+                    continue
                 started = datetime.now(UTC)
                 try:
-                    response = await client.get(
+                    response = await client.request(
+                        endpoint.method,
                         path,
                         headers={
                             "Authorization": f"Bearer {token}",
-                            "X-Request-ID": "admin-api-check",
+                            "X-Request-ID": f"admin-api-check-{endpoint.key}",
+                            "Accept": "application/json",
                         },
                     )
                     elapsed = int((datetime.now(UTC) - started).total_seconds() * 1000)
+                    content_type = response.headers.get("content-type", "")
+                    body: object
+                    if "application/json" in content_type:
+                        try:
+                            body = response.json()
+                        except ValueError:
+                            body = response.text[:1000]
+                    else:
+                        body = response.text[:1000]
                     results.append(
                         {
+                            "endpoint_id": endpoint.key,
+                            "name": endpoint.name,
                             "path": path,
+                            "method": endpoint.method,
+                            "scope": endpoint.scope,
                             "status": response.status_code,
                             "ok": response.status_code < 400,
+                            "skipped": False,
                             "duration_ms": elapsed,
-                            "body": response.text[:500],
+                            "body": body,
+                            "request_id": response.headers.get("x-request-id"),
                         }
                     )
                 except Exception as exc:
+                    logger.exception("Administrator API check failed for %s", endpoint.key)
                     results.append(
-                        {"path": path, "status": 0, "ok": False, "duration_ms": 0, "body": str(exc)}
+                        {
+                            "endpoint_id": endpoint.key,
+                            "name": endpoint.name,
+                            "path": path,
+                            "method": endpoint.method,
+                            "scope": endpoint.scope,
+                            "status": 0,
+                            "ok": False,
+                            "skipped": False,
+                            "duration_ms": 0,
+                            "body": f"{exc.__class__.__name__}: {exc}",
+                        }
                     )
-        return JSONResponse({"mode": container.api_access.mode, "results": results})
+        return JSONResponse(
+            {
+                "mode": api_access.mode,
+                "checked_at": datetime.now(UTC).isoformat(),
+                "results": results,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
 
 
 class GitHubImportView(_AdminBaseView):

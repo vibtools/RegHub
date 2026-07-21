@@ -1,5 +1,9 @@
 import asyncio
+import json
 import logging
+import re
+import time
+import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -25,6 +29,45 @@ _TERMINAL = {
     OperationStatus.CANCELLED,
     OperationStatus.SKIPPED,
 }
+_SENSITIVE_KEYS = {"secret", "token", "password", "api_key", "authorization", "credential"}
+_SECRET_PATTERNS = (
+    re.compile(r"(?i)(bearer\s+)[A-Za-z0-9._~+\-/=]+"),
+    re.compile(r"(?i)(vt_reg_)[A-Za-z0-9_-]+"),
+    re.compile(r"(?i)(github_pat_)[A-Za-z0-9_]+"),
+    re.compile(r"(?i)(ghp_)[A-Za-z0-9]+"),
+)
+
+
+def _redact_text(value: str) -> str:
+    result = value
+    for pattern in _SECRET_PATTERNS:
+        result = pattern.sub(lambda match: f"{match.group(1)}[REDACTED]", result)
+    return result
+
+
+def _safe_payload(value: Any, *, depth: int = 0) -> Any:
+    if depth > 5:
+        return "[MAX_DEPTH]"
+    if isinstance(value, dict):
+        result: dict[str, Any] = {}
+        for key, item in list(value.items())[:100]:
+            normalized = str(key).casefold()
+            if any(part in normalized for part in _SENSITIVE_KEYS):
+                result[str(key)] = "[REDACTED]"
+            else:
+                result[str(key)] = _safe_payload(item, depth=depth + 1)
+        return result
+    if isinstance(value, (list, tuple, set)):
+        return [_safe_payload(item, depth=depth + 1) for item in list(value)[:100]]
+    if isinstance(value, str):
+        return _redact_text(value[:4000])
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    return _redact_text(str(value)[:4000])
+
+
+def _compact_json(value: Any) -> str:
+    return json.dumps(_safe_payload(value), ensure_ascii=False, separators=(",", ":"), default=str)
 
 
 class OperationService:
@@ -360,15 +403,68 @@ class OperationRunner:
         )
 
     async def _execute(self, operation_id: UUID) -> None:
+        started = time.perf_counter()
+        stage = "bootstrap"
         try:
             if self._container is None:
                 raise RuntimeError("Operation runner is not bound to the application container")
             operation = await self.service.get(operation_id)
             await self.service.mark_running(operation_id)
-            await self._log(operation_id, 2, f"Starting {operation.title}")
+            await self._log(
+                operation_id,
+                1,
+                f"$ reghub operation run --id {operation.id} --type {operation.operation_type}",
+                "notice",
+            )
+            await self._log(
+                operation_id,
+                2,
+                "Operation context initialized",
+                "debug",
+                {
+                    "requested_by": operation.requested_by or "system",
+                    "return_url": operation.return_url,
+                    "retry_of_id": str(operation.retry_of_id) if operation.retry_of_id else None,
+                },
+            )
+            await self._log(
+                operation_id,
+                3,
+                "Input payload accepted",
+                "debug",
+                {"payload": _safe_payload(operation.input_payload or {})},
+            )
+            stage = "dispatch"
+            await self._log(
+                operation_id,
+                4,
+                f"Dispatching handler for {operation.operation_type}",
+                "debug",
+            )
             result = await self._dispatch(operation)
+            stage = "finalize"
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            await self._log(
+                operation_id,
+                98,
+                "Handler completed; finalizing persistent operation state",
+                "debug",
+                {"elapsed_ms": elapsed_ms, "result": _safe_payload(result)},
+            )
             await self.service.complete(operation_id, result)
         except DuplicateTemplateError as exc:
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            await self._log(
+                operation_id,
+                100,
+                "Repository lookup matched an existing registry template; import changed to no-op",
+                "notice",
+                {
+                    "elapsed_ms": elapsed_ms,
+                    "template_id": str(exc.template_id),
+                    "template_slug": exc.template_slug,
+                },
+            )
             await self.service.skip(
                 operation_id,
                 "No import was required: this repository is already registered in RegHub.",
@@ -389,13 +485,20 @@ class OperationRunner:
                 await self.service.cancel(operation_id)
         except Exception as exc:
             logger.exception("Admin operation %s failed", operation_id)
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            trace = _redact_text(traceback.format_exc(limit=16))[-12000:]
             await self.service.append_log(
                 operation_id,
-                f"{exc.__class__.__name__}: {exc}",
+                f"FAILED stage={stage}: {exc.__class__.__name__}: {_redact_text(str(exc))}",
                 level="error",
-                data={"exception_type": exc.__class__.__name__},
+                data={
+                    "stage": stage,
+                    "exception_type": exc.__class__.__name__,
+                    "elapsed_ms": elapsed_ms,
+                    "traceback": trace,
+                },
             )
-            await self.service.fail(operation_id, str(exc))
+            await self.service.fail(operation_id, _redact_text(str(exc)))
 
     async def _dispatch(self, operation: AdminOperation) -> dict[str, Any]:
         handlers = {
@@ -418,14 +521,28 @@ class OperationRunner:
         adapter = str(payload.get("adapter", "github"))
         feature = f"{adapter}_import"
         self._container.require_feature(feature, task=True)
+        repository_url = str(payload.get("repository_url", ""))
+        await self._log(operation.id, 7, f"Feature gate accepted: {feature}", "debug")
+        await self._log(
+            operation.id,
+            8,
+            "Import parameters resolved",
+            "debug",
+            {
+                "adapter": adapter,
+                "repository_url": repository_url,
+                "category_id": payload.get("category_id"),
+                "provider_id": payload.get("provider_id"),
+            },
+        )
         await self._log(operation.id, 10, f"Validating {adapter.title()} repository URL")
         await self._log(operation.id, 20, f"Connecting to {adapter.title()} API")
 
         async def progress(value: int, message: str, level: str = "info") -> None:
-            await self._log(operation.id, value, message, level)
+            await self._log(operation.id, value, _redact_text(message), level)
 
         template = await self._container.template_import_service.import_repository(
-            repository_url=str(payload.get("repository_url", "")),
+            repository_url=repository_url,
             requested_by=operation.requested_by or "system",
             adapter_name=adapter,
             category_id=UUID(str(payload["category_id"])) if payload.get("category_id") else None,
@@ -507,6 +624,13 @@ class OperationRunner:
         errors: list[str] = []
         synced = 0
         total = len(identifiers)
+        await self._log(
+            operation.id,
+            5,
+            "Sync batch prepared",
+            "debug",
+            {"template_count": total, "template_ids": [str(item) for item in identifiers]},
+        )
         for index, identifier in enumerate(identifiers, start=1):
             await self._log(
                 operation.id,
@@ -523,7 +647,12 @@ class OperationRunner:
                     current_index: int = index,
                 ) -> None:
                     scaled = 5 + int(((current_index - 1) + value / 100) / total * 85)
-                    await self._log(operation.id, scaled, message, level)
+                    await self._log(
+                        operation.id,
+                        scaled,
+                        f"[{current_index}/{total}] {_redact_text(message)}",
+                        level,
+                    )
 
                 template = await self._container.template_sync_service.sync_one(
                     identifier,
@@ -541,7 +670,9 @@ class OperationRunner:
                 await self._log(operation.id, 5 + int(index / total * 85), str(exc), "error")
         if errors and not synced:
             raise ValidationError("; ".join(errors))
-        return {"synced": synced, "failed": len(errors), "errors": errors}
+        result = {"synced": synced, "failed": len(errors), "errors": errors}
+        await self._log(operation.id, 94, "Sync batch result", "debug", result)
+        return result
 
     async def _set_template_status(self, operation: AdminOperation) -> dict[str, Any]:
         assert self._container is not None

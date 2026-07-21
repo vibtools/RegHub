@@ -276,7 +276,7 @@
                       </label>
                       <label class="form-selectgroup-item flex-fill">
                         <input type="radio" name="api_mode" value="live" class="form-selectgroup-input" {% if api_mode == 'live' %}checked{% endif %}>
-                        <div class="form-selectgroup-label d-flex align-items-center p-3"><div class="me-3"><span class="form-selectgroup-check"></span></div><div><strong>Live Mode</strong><div class="text-secondary small">Every registry endpoint requires a valid <code>vt_reg_...</code> service token. Health and readiness stay public.</div></div></div>
+                        <div class="form-selectgroup-label d-flex align-items-center p-3"><div class="me-3"><span class="form-selectgroup-check"></span></div><div><strong>Live Mode</strong><div class="text-secondary small">Registry data endpoints require a valid <code>vt_reg_...</code> service token. Health and readiness stay public.</div></div></div>
                       </label>
                     </div>
                     <button class="btn btn-primary w-100 mt-3" name="action" value="save_api_mode" type="submit">Apply API mode</button>
@@ -286,16 +286,55 @@
             </div>
             <div class="col-xl-7">
               <div class="card h-100">
-                <div class="card-header"><h3 class="card-title">Live endpoint check</h3></div>
-                <div class="card-body">
-                  <p class="text-secondary">Runs authenticated checks against the active application routes using a temporary internal check token.</p>
-                  <button id="runApiCheck" class="btn btn-outline-primary" type="button"><i class="fa-solid fa-vial-circle-check me-1"></i>Check API endpoints</button>
-                  <div id="apiCheckStatus" class="small text-secondary mt-2"></div>
-                  <div id="apiCheckResults" class="table-responsive mt-3 d-none">
-                    <table class="table table-sm table-vcenter"><thead><tr><th>Endpoint</th><th>HTTP</th><th>Time</th><th>Result</th></tr></thead><tbody></tbody></table>
+                <div class="card-header"><h3 class="card-title">API verification</h3></div>
+                <div class="card-body d-flex flex-column">
+                  <p class="text-secondary">Checks the real FastAPI application routes. Live Mode checks use a short-lived internal token and never expose stored service-token secrets.</p>
+                  <div class="d-flex flex-wrap gap-2 align-items-center mt-auto">
+                    <button id="runApiCheck" class="btn btn-outline-primary" type="button"><i class="fa-solid fa-vial-circle-check me-1"></i>Check API endpoints</button>
+                    <span id="apiCheckStatus" class="small text-secondary" aria-live="polite">Ready.</span>
                   </div>
+                  <div id="apiCheckSummary" class="reghub-status-grid mt-3 d-none"></div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div class="card" id="apiEndpointRegistry">
+            <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+              <div>
+                <h3 class="card-title mb-0">API endpoint registry</h3>
+                <div class="text-secondary small">Check one route without reloading, or copy a ready-to-use request with token instructions.</div>
+              </div>
+              {% if published_template_slug %}<span class="badge bg-green-lt">Test template: {{ published_template_slug }}</span>{% else %}<span class="badge bg-yellow-lt">No published template for dynamic checks</span>{% endif %}
+            </div>
+            <div class="table-responsive">
+              <table class="table table-vcenter card-table" id="apiEndpointTable">
+                <thead><tr><th style="width:80px">Method</th><th>Endpoint</th><th style="width:130px">Access</th><th style="width:110px">Check</th><th style="min-width:260px">Result</th><th style="width:170px"></th></tr></thead>
+                <tbody>
+                  {% for endpoint in api_endpoint_rows %}
+                  <tr data-endpoint-id="{{ endpoint.key }}" data-api-method="{{ endpoint.method }}" data-api-path="{{ endpoint.check_path or endpoint.path_template|replace('{slug}', 'YOUR_TEMPLATE_SLUG') }}" data-api-scope="{{ endpoint.scope or '' }}" data-api-public="{{ '1' if endpoint.public_always else '0' }}">
+                    <td><span class="badge bg-azure-lt">{{ endpoint.method }}</span></td>
+                    <td>
+                      <strong>{{ endpoint.name }}</strong>
+                      <div><code class="reghub-wrap">{{ endpoint.path_template }}</code></div>
+                      <div class="text-secondary small">{{ endpoint.description }}</div>
+                    </td>
+                    <td>{% if endpoint.public_always %}<span class="badge bg-green-lt">Always public</span>{% else %}<span class="badge bg-blue-lt">{{ endpoint.scope }}</span>{% endif %}</td>
+                    <td class="api-endpoint-status"><span class="badge bg-secondary-lt">Not checked</span></td>
+                    <td class="api-endpoint-result text-secondary small">{% if endpoint.checkable %}Ready for live verification.{% else %}Publish a template before checking this route.{% endif %}</td>
+                    <td>
+                      <div class="btn-list flex-nowrap">
+                        <button class="btn btn-sm btn-outline-primary api-check-one" type="button" {% if not endpoint.checkable %}disabled{% endif %}><i class="fa-solid fa-vial me-1"></i>Check</button>
+                        <button class="btn btn-sm btn-outline-secondary api-use-one" type="button"><i class="fa-solid fa-copy me-1"></i>Use</button>
+                      </div>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="card-footer small text-secondary">
+              “Use” copies the full URL, HTTP method, token header and curl example. RegHub never reveals an existing service token; when no newly-created token is visible, the copied instruction contains a secure replacement placeholder.
             </div>
           </div>
 
@@ -409,18 +448,38 @@
 (() => {
   const storageKey = 'reghub-settings-active-tab';
   const tabButtons = Array.from(document.querySelectorAll('#settingsTabs [data-bs-toggle="tab"]'));
-  const requested = window.location.hash || window.sessionStorage.getItem(storageKey);
-  if (requested) {
-    const button = tabButtons.find(item => item.dataset.bsTarget === requested);
+  const serverRequested = {{ ('#' ~ active_pane)|tojson }};
+  const requested = window.location.hash || serverRequested || window.sessionStorage.getItem(storageKey) || '#features-pane';
+
+  function showSettingsPane(target) {
+    const button = tabButtons.find(item => item.dataset.bsTarget === target);
     if (button && window.bootstrap) {
       window.bootstrap.Tab.getOrCreateInstance(button).show();
     }
   }
+
+  showSettingsPane(requested);
   tabButtons.forEach(button => {
     button.addEventListener('shown.bs.tab', event => {
       const target = event.target.dataset.bsTarget;
       window.sessionStorage.setItem(storageKey, target);
       history.replaceState(null, '', target);
+    });
+  });
+
+  document.querySelectorAll('form[method="post"]').forEach(form => {
+    form.addEventListener('submit', () => {
+      const pane = form.closest('.tab-pane');
+      const target = pane ? `#${pane.id}` : (window.location.hash || requested);
+      let field = form.querySelector('input[name="return_tab"]');
+      if (!field) {
+        field = document.createElement('input');
+        field.type = 'hidden';
+        field.name = 'return_tab';
+        form.appendChild(field);
+      }
+      field.value = target.replace(/^#/, '');
+      window.sessionStorage.setItem(storageKey, target);
     });
   });
 
@@ -432,37 +491,142 @@
   });
 
   const checkButton = document.getElementById('runApiCheck');
-  if (checkButton) checkButton.addEventListener('click', async () => {
-    const status = document.getElementById('apiCheckStatus');
-    const wrapper = document.getElementById('apiCheckResults');
-    const body = wrapper.querySelector('tbody');
-    checkButton.disabled = true;
-    status.textContent = 'Running live route checks…';
-    body.innerHTML = '';
+  const apiRows = Array.from(document.querySelectorAll('#apiEndpointTable tbody tr[data-endpoint-id]'));
+  const apiStatus = document.getElementById('apiCheckStatus');
+  const apiSummary = document.getElementById('apiCheckSummary');
+
+  function copyWithFallback(text) {
+    if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+    return Promise.resolve();
+  }
+
+  function resultText(item) {
+    if (item.skipped) return String(item.body || 'Skipped');
+    if (item.ok) return `HTTP ${item.status} · ${item.duration_ms} ms${item.request_id ? ` · request ${item.request_id}` : ''}`;
+    const body = typeof item.body === 'string' ? item.body : JSON.stringify(item.body || {});
+    return `HTTP ${item.status || 'ERR'} · ${item.duration_ms || 0} ms · ${body.slice(0, 260)}`;
+  }
+
+  function renderApiResult(item) {
+    const row = apiRows.find(candidate => candidate.dataset.endpointId === item.endpoint_id);
+    if (!row) return;
+    const badge = row.querySelector('.api-endpoint-status .badge');
+    const result = row.querySelector('.api-endpoint-result');
+    badge.textContent = item.skipped ? 'SKIP' : (item.ok ? `HTTP ${item.status}` : `HTTP ${item.status || 'ERR'}`);
+    badge.className = `badge bg-${item.skipped ? 'yellow' : item.ok ? 'green' : 'red'}-lt`;
+    result.textContent = resultText(item);
+    result.className = `api-endpoint-result small text-${item.skipped ? 'warning' : item.ok ? 'success' : 'danger'}`;
+  }
+
+  async function runApiCheck(endpointId = '') {
+    const form = new FormData();
+    form.append('csrf_token', {{ csrf_token|tojson }});
+    if (endpointId) form.append('endpoint_id', endpointId);
+    const response = await fetch('/admin/settings/api-check', {
+      method: 'POST',
+      body: form,
+      credentials: 'same-origin',
+      headers: {Accept: 'application/json'},
+      cache: 'no-store',
+    });
+    let payload;
     try {
-      const form = new FormData();
-      form.append('csrf_token', {{ csrf_token|tojson }});
-      const response = await fetch('/admin/settings/api-check', {method:'POST', body:form, credentials:'same-origin', headers:{Accept:'application/json'}});
-      const payload = await response.json();
-      (payload.results || []).forEach(item => {
-        const row = document.createElement('tr');
-        row.innerHTML = `<td><code></code></td><td><span class="badge"></span></td><td></td><td></td>`;
-        row.querySelector('code').textContent = item.path;
-        const badge = row.querySelector('.badge');
-        badge.textContent = item.status || 'ERR';
-        badge.className = `badge bg-${item.ok ? 'green' : 'red'}-lt`;
-        row.children[2].textContent = `${item.duration_ms} ms`;
-        row.children[3].textContent = item.ok ? 'PASS' : String(item.body || '').slice(0, 160);
-        body.appendChild(row);
-      });
-      wrapper.classList.remove('d-none');
-      status.textContent = `Completed in ${payload.mode} mode.`;
+      payload = await response.json();
+    } catch (_error) {
+      throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    }
+    if (!response.ok) throw new Error(payload.error?.message || payload.detail || `HTTP ${response.status}`);
+    (payload.results || []).forEach(renderApiResult);
+    return payload;
+  }
+
+  if (checkButton) checkButton.addEventListener('click', async () => {
+    checkButton.disabled = true;
+    apiStatus.textContent = 'Running checks against the root FastAPI application…';
+    try {
+      const payload = await runApiCheck();
+      const results = payload.results || [];
+      const passed = results.filter(item => item.ok).length;
+      const failed = results.filter(item => !item.ok && !item.skipped).length;
+      const skipped = results.filter(item => item.skipped).length;
+      apiSummary.innerHTML = `<div class="reghub-status-tile"><strong>${passed}</strong><div class="text-secondary small">Passed</div></div><div class="reghub-status-tile"><strong>${failed}</strong><div class="text-secondary small">Failed</div></div><div class="reghub-status-tile"><strong>${skipped}</strong><div class="text-secondary small">Skipped</div></div>`;
+      apiSummary.classList.remove('d-none');
+      apiStatus.textContent = `Completed in ${payload.mode} mode: ${passed} passed, ${failed} failed, ${skipped} skipped.`;
     } catch (error) {
-      status.textContent = `API check failed: ${error.message}`;
+      apiStatus.textContent = `API check failed: ${error.message}`;
     } finally {
       checkButton.disabled = false;
     }
   });
+
+  document.querySelectorAll('.api-check-one').forEach(button => {
+    button.addEventListener('click', async () => {
+      const row = button.closest('tr[data-endpoint-id]');
+      const badge = row.querySelector('.api-endpoint-status .badge');
+      const result = row.querySelector('.api-endpoint-result');
+      button.disabled = true;
+      badge.textContent = 'CHECKING';
+      badge.className = 'badge bg-blue-lt';
+      result.textContent = 'Sending authenticated internal request…';
+      try {
+        await runApiCheck(row.dataset.endpointId);
+      } catch (error) {
+        badge.textContent = 'ERROR';
+        badge.className = 'badge bg-red-lt';
+        result.textContent = error.message;
+        result.className = 'api-endpoint-result small text-danger';
+      } finally {
+        button.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll('.api-use-one').forEach(button => {
+    button.addEventListener('click', async () => {
+      const row = button.closest('tr[data-endpoint-id]');
+      const method = row.dataset.apiMethod || 'GET';
+      const path = row.dataset.apiPath || '';
+      const scope = row.dataset.apiScope || 'public';
+      const alwaysPublic = row.dataset.apiPublic === '1';
+      const tokenInput = document.getElementById('newApiToken');
+      const token = tokenInput?.value || 'vt_reg_REPLACE_WITH_SERVICE_TOKEN';
+      const url = new URL(path, window.location.origin).toString();
+      const header = alwaysPublic ? '# No service token is required for this endpoint.' : `Authorization: Bearer ${token}`;
+      const curlHeader = alwaysPublic ? '' : ` -H "Authorization: Bearer ${token}"`;
+      const instruction = [
+        `RegHub API: ${row.querySelector('strong').textContent.trim()}`,
+        `Method: ${method}`,
+        `URL: ${url}`,
+        `Permission scope: ${scope}`,
+        header,
+        '',
+        `PowerShell:`,
+        alwaysPublic
+          ? `Invoke-RestMethod -Method ${method} -Uri "${url}"`
+          : `$headers = @{ Authorization = "Bearer ${token}" }\nInvoke-RestMethod -Method ${method} -Uri "${url}" -Headers $headers`,
+        '',
+        `curl:`,
+        `curl -X ${method}${curlHeader} "${url}"`,
+      ].join('\n');
+      try {
+        await copyWithFallback(instruction);
+        const original = button.innerHTML;
+        button.innerHTML = '<i class="fa-solid fa-check me-1"></i>Copied';
+        window.setTimeout(() => { button.innerHTML = original; }, 1600);
+      } catch (_error) {
+        button.textContent = 'Copy failed';
+      }
+    });
+  });
+
 })();
 </script>
 {% endblock %}

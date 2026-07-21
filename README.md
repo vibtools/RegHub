@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.2.3 Operations & API Access**
+Current release: **v0.2.3.1 Settings, API Check & Terminal Hotfix**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -14,9 +14,13 @@ deploy user projects.
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
 
-## v0.2.3 features
+## v0.2.3.1 hotfix
 
 All v0.2.2.1 registry, provider, media, API, Keycloak, runtime-settings, and database behavior is preserved.
+
+- Settings actions remain on the active Feature, Integration, API Manage, or Custom API tab.
+- API Manage verifies the root FastAPI routes and supports per-endpoint Check and Use/copy controls.
+- Operation terminal logs include compact, redacted developer diagnostics and bounded failure tracebacks.
 
 - Duplicate imports finish as **Skipped / No change** and link the existing template.
 - Import and sync operations show compact developer-oriented terminal diagnostics.
@@ -102,4 +106,4 @@ GET /api/v1/ready
 5. The entrypoint runs `alembic upgrade head` and `python -m scripts.seed` automatically.
 6. Verify health, readiness, tag filtering, Operations, and Settings.
 
-See `docs/21_V0.2.3_OPERATIONS_API_ACCESS.md` and `docs/22_V0.2.3_UPGRADE.md`.
+See `docs/23_V0.2.3.1_HOTFIX.md` and `docs/24_V0.2.3.1_UPGRADE.md`.

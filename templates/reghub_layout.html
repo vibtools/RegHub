@@ -129,36 +129,46 @@
     min-height: 320px;
     max-height: 62vh;
     overflow: auto;
-    padding: 1rem;
+    padding: .55rem .7rem;
     border-radius: .5rem;
     background: #0b1020;
     color: #d7e0ff;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    font-size: .8125rem;
-    line-height: 1.55;
-    white-space: pre-wrap;
+    font-size: .79rem;
+    line-height: 1.28;
+    white-space: normal;
     overflow-wrap: anywhere;
-  }
-
-  .reghub-log-panel {
-    padding: .75rem .85rem;
-    line-height: 1.35;
   }
 
   .reghub-log-line {
     display: grid;
-    grid-template-columns: 92px 72px minmax(0, 1fr);
-    column-gap: .55rem;
-    align-items: start;
+    grid-template-columns: 88px 58px minmax(0, 1fr);
+    column-gap: .45rem;
+    align-items: baseline;
     margin: 0;
-    padding: .12rem 0;
-    border-bottom: 1px solid rgba(255,255,255,.035);
+    padding: .2rem .15rem;
+    min-height: 0;
+    border-bottom: 1px solid rgba(255,255,255,.045);
   }
 
-  .reghub-log-time { color: #8190b7; white-space: nowrap; }
+  .reghub-log-line:last-child { border-bottom: 0; }
+  .reghub-log-time { color: #8190b7; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .reghub-log-level { color: #8fd3ff; font-weight: 700; white-space: nowrap; }
+  .reghub-log-content { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .55rem; }
   .reghub-log-message { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .reghub-log-data { grid-column: 3; color: #91a3cf; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .reghub-log-data {
+    min-width: 0;
+    max-width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #91a3cf;
+    font: inherit;
+    font-size: .74rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .reghub-log-data:empty { display: none; }
   .reghub-log-line[data-level="error"] .reghub-log-level,
   .reghub-log-line[data-level="error"] .reghub-log-message { color: #ff9b9b; }
   .reghub-log-line[data-level="warning"] .reghub-log-level,
@@ -239,9 +249,10 @@
       max-height: 55vh;
     }
     .reghub-log-line {
-      grid-template-columns: 76px 62px minmax(0, 1fr);
-      column-gap: .35rem;
-      font-size: .75rem;
+      grid-template-columns: 72px 52px minmax(0, 1fr);
+      column-gap: .3rem;
+      font-size: .72rem;
+      padding-block: .18rem;
     }
 
     .reghub-sticky-actions {
