@@ -1,0 +1,211 @@
+{% extends "sqladmin/layout.html" %}
+
+{% block head %}
+{{ super() }}
+<style>
+  :root {
+    --reghub-page-gap: 1rem;
+    --reghub-panel-border: var(--tblr-border-color, #dce1e7);
+  }
+
+  /* SQLAdmin renders the content block inside a Bootstrap .row. Every custom
+     page must therefore provide a real column. This wrapper prevents the
+     flex-row shrink/overflow regression that broke v0.2.2 custom pages. */
+  .reghub-page-shell {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .reghub-page {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .reghub-page,
+  .reghub-page * {
+    box-sizing: border-box;
+  }
+
+  .reghub-page .row > *,
+  .reghub-page .d-flex > *,
+  .reghub-page .card,
+  .reghub-page form,
+  .reghub-page fieldset {
+    min-width: 0;
+  }
+
+  .reghub-page code,
+  .reghub-page pre,
+  .reghub-page .form-hint,
+  .reghub-page .text-secondary,
+  .reghub-page td,
+  .reghub-page dd,
+  .reghub-wrap {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .reghub-page pre {
+    max-width: 100%;
+    white-space: pre-wrap;
+  }
+
+  .reghub-page .table-responsive {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .reghub-page .table {
+    margin-bottom: 0;
+  }
+
+  .reghub-page .form-control,
+  .reghub-page .form-select,
+  .reghub-page textarea,
+  .reghub-page input {
+    max-width: 100%;
+  }
+
+  .reghub-content-narrow {
+    width: 100%;
+    max-width: 980px;
+    margin-inline: auto;
+  }
+
+  .reghub-section-stack {
+    display: grid;
+    gap: var(--reghub-page-gap);
+  }
+
+  .reghub-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .75rem;
+  }
+
+  .reghub-toolbar > * {
+    min-width: 0;
+  }
+
+  .reghub-sticky-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    background: rgba(255, 255, 255, .96);
+    backdrop-filter: blur(8px);
+    border-top: 1px solid var(--reghub-panel-border);
+  }
+
+  .reghub-status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: .75rem;
+  }
+
+  .reghub-status-tile {
+    border: 1px solid var(--reghub-panel-border);
+    border-radius: .5rem;
+    padding: .75rem;
+    background: var(--tblr-bg-surface, #fff);
+  }
+
+  .reghub-submit-state {
+    display: none;
+  }
+
+  form[data-reghub-operation-form][aria-busy="true"] .reghub-submit-state {
+    display: inline-flex;
+  }
+
+  form[data-reghub-operation-form][aria-busy="true"] .reghub-submit-label {
+    display: none;
+  }
+
+  .reghub-log-panel {
+    width: 100%;
+    min-height: 320px;
+    max-height: 62vh;
+    overflow: auto;
+    padding: 1rem;
+    border-radius: .5rem;
+    background: #0b1020;
+    color: #d7e0ff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: .8125rem;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .reghub-log-line {
+    display: block;
+    margin: 0 0 .25rem;
+  }
+
+  .reghub-log-line[data-level="error"] { color: #ff9b9b; }
+  .reghub-log-line[data-level="warning"] { color: #ffd479; }
+  .reghub-log-line[data-level="debug"] { color: #9fb2d9; }
+
+  .reghub-json-editor {
+    min-height: 8.5rem;
+    resize: vertical;
+  }
+
+  .reghub-connection-dot {
+    display: inline-block;
+    width: .55rem;
+    height: .55rem;
+    margin-right: .35rem;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  .reghub-pulse {
+    animation: reghub-pulse 1.4s infinite;
+  }
+
+  @keyframes reghub-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .5; }
+  }
+
+  @media (max-width: 767.98px) {
+    .reghub-page .card-header,
+    .reghub-page .card-footer {
+      gap: .75rem;
+      flex-wrap: wrap;
+    }
+
+    .reghub-page .btn-list,
+    .reghub-page .btn-list .btn,
+    .reghub-page .reghub-mobile-full {
+      width: 100%;
+    }
+
+    .reghub-page .btn-list {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .reghub-log-panel {
+      min-height: 260px;
+      max-height: 55vh;
+    }
+
+    .reghub-sticky-actions {
+      position: static;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="col-12 reghub-page-shell">
+  <div class="reghub-page">
+    {% block reghub_content %}{% endblock %}
+  </div>
+</div>
+{% endblock %}

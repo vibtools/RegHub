@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.2.1 - 2026-07-21
+
+- Fixed the SQLAdmin custom-page flex shrink regression that broke Settings, Operations, imports, Asset Gallery, and the custom dashboard layout.
+- Added a shared responsive admin layout with a required full-width Bootstrap column, safe text wrapping, responsive tables, and mobile controls.
+- Rebuilt Settings as compact tabs and accordions so integration credentials no longer create an extremely long unreadable page.
+- Added operation-log JSON polling and an automatic SSE-to-polling fallback so progress and logs remain visible through proxies that interrupt live streams.
+- Added explicit connection state, manual refresh, non-empty waiting state, robust log copy, and wrapped result output to the operation detail page.
+- Added submit-state feedback and double-submit prevention to GitHub, GitLab/Bitbucket, and Local Import pages.
+- No database migration, public API removal, feature removal, or runtime settings reset.
+
 ## 0.2.2 - 2026-07-21
 
 ### Operations and administrator experience

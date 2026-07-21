@@ -1,40 +1,58 @@
-{% extends "sqladmin/layout.html" %}
-{% block content %}
-<div class="d-flex align-items-center justify-content-between mb-3">
-  <div>
-    <h2 class="page-title">Operations Console</h2>
-    <div class="text-secondary">Imports, syncs, publication and media tasks with persistent logs.</div>
+{% extends "reghub_layout.html" %}
+{% block reghub_content %}
+<div class="reghub-section-stack">
+  <div class="reghub-toolbar">
+    <div>
+      <h2 class="page-title mb-1">Operations Console</h2>
+      <div class="text-secondary">Imports, syncs, publication and media tasks with persistent logs.</div>
+    </div>
+    <a class="btn btn-outline-secondary" href="/admin/operations">
+      <i class="fa-solid fa-rotate me-1"></i>Refresh
+    </a>
   </div>
-  <a class="btn btn-outline-secondary" href="/admin/operations">Refresh</a>
-</div>
-{% if not enabled %}
-<div class="alert alert-warning">Operations Console is disabled in Settings. Existing operation history remains readable.</div>
-{% endif %}
-<div class="card">
-  <div class="table-responsive">
-    <table class="table table-vcenter card-table">
-      <thead><tr><th>Operation</th><th>Status</th><th>Progress</th><th>Requested by</th><th>Started</th><th></th></tr></thead>
-      <tbody>
-      {% for item in operations %}
-        <tr>
-          <td><strong>{{ item.title }}</strong><div class="text-secondary small">{{ item.operation_type }} · {{ item.id }}</div></td>
-          <td>
-            {% set color = 'green' if item.status.value == 'succeeded' else ('red' if item.status.value == 'failed' else ('yellow' if item.status.value == 'running' else ('secondary' if item.status.value == 'cancelled' else 'blue'))) %}
-            <span class="badge bg-{{ color }}-lt">{{ item.status.value }}</span>
-          </td>
-          <td style="min-width:180px">
-            <div class="progress progress-sm"><div class="progress-bar" style="width: {{ item.progress }}%"></div></div>
-            <div class="small text-secondary mt-1">{{ item.progress }}%</div>
-          </td>
-          <td>{{ item.requested_by or 'system' }}</td>
-          <td>{{ item.started_at or item.created_at }}</td>
-          <td><a class="btn btn-sm btn-primary" href="/admin/operations/{{ item.id }}">Open logs</a></td>
-        </tr>
-      {% else %}
-        <tr><td colspan="6" class="text-center text-secondary py-5">No operations have been created yet.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
+
+  {% if not enabled %}
+  <div class="alert alert-warning mb-0">Operations Console is disabled in Settings. Existing operation history remains readable.</div>
+  {% endif %}
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-vcenter card-table">
+        <thead>
+          <tr>
+            <th style="min-width:260px">Operation</th>
+            <th>Status</th>
+            <th style="min-width:180px">Progress</th>
+            <th style="min-width:140px">Requested by</th>
+            <th style="min-width:180px">Started</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for item in operations %}
+          <tr>
+            <td>
+              <strong>{{ item.title }}</strong>
+              <div class="text-secondary small reghub-wrap">{{ item.operation_type }} · {{ item.id }}</div>
+            </td>
+            <td>
+              {% set color = 'green' if item.status.value == 'succeeded' else ('red' if item.status.value == 'failed' else ('yellow' if item.status.value == 'running' else ('secondary' if item.status.value == 'cancelled' else 'blue'))) %}
+              <span class="badge bg-{{ color }}-lt">{{ item.status.value }}</span>
+            </td>
+            <td>
+              <div class="progress progress-sm"><div class="progress-bar" style="width: {{ item.progress }}%"></div></div>
+              <div class="small text-secondary mt-1">{{ item.progress }}%</div>
+            </td>
+            <td class="reghub-wrap">{{ item.requested_by or 'system' }}</td>
+            <td>{{ item.started_at or item.created_at }}</td>
+            <td><a class="btn btn-sm btn-primary" href="/admin/operations/{{ item.id }}">Open logs</a></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="text-center text-secondary py-5">No operations have been created yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}

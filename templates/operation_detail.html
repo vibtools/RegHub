@@ -1,109 +1,332 @@
-{% extends "sqladmin/layout.html" %}
-{% block content %}
-<style>
-  .reghub-log { background:#0b1020; color:#d7e0ff; border-radius:8px; min-height:360px; max-height:60vh; overflow:auto; padding:16px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; line-height:1.55; white-space:pre-wrap; }
-  .reghub-log-line[data-level="error"] { color:#ff9b9b; }
-  .reghub-log-line[data-level="warning"] { color:#ffd479; }
-  .reghub-log-line[data-level="debug"] { color:#9fb2d9; }
-  .reghub-pulse { animation: reghub-pulse 1.4s infinite; }
-  @keyframes reghub-pulse { 0%,100% { opacity:1 } 50% { opacity:.55 } }
-</style>
-<div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
-  <div>
-    <h2 class="page-title">{{ operation.title }}</h2>
-    <div class="text-secondary">Operation {{ operation.id }} · {{ operation.operation_type }}</div>
-  </div>
-  <div class="btn-list">
-    <a class="btn btn-outline-secondary" href="/admin/operations">All operations</a>
-    {% if operation.return_url %}<a class="btn btn-outline-primary" href="{{ operation.return_url }}">Back to previous page</a>{% endif %}
-  </div>
-</div>
-<div class="row row-cards">
-  <div class="col-lg-8">
-    <div class="card">
-      <div class="card-header d-flex justify-content-between"><h3 class="card-title">Live progress</h3><span id="statusBadge" class="badge">{{ operation.status.value }}</span></div>
-      <div class="card-body">
-        <div class="d-flex justify-content-between mb-2"><span id="statusText">{{ operation.status.value|title }}</span><strong id="progressText">{{ operation.progress }}%</strong></div>
-        <div class="progress progress-lg"><div id="progressBar" class="progress-bar" style="width:{{ operation.progress }}%"></div></div>
-        <div id="errorBox" class="alert alert-danger mt-3 {% if not operation.error_message %}d-none{% endif %}">{{ operation.error_message or '' }}</div>
-        <div id="resultBox" class="alert alert-success mt-3 {% if operation.status.value != 'succeeded' %}d-none{% endif %}">Operation completed successfully.</div>
-      </div>
+{% extends "reghub_layout.html" %}
+{% block reghub_content %}
+<div class="reghub-section-stack">
+  <div class="reghub-toolbar">
+    <div>
+      <h2 class="page-title mb-1">{{ operation.title }}</h2>
+      <div class="text-secondary reghub-wrap">Operation {{ operation.id }} · {{ operation.operation_type }}</div>
     </div>
-    <div class="card mt-3">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <h3 class="card-title">Debug logs</h3>
-        <div class="btn-list"><button id="copyLogs" type="button" class="btn btn-sm btn-outline-secondary">Copy logs</button><a class="btn btn-sm btn-outline-secondary" href="/admin/operations/{{ operation.id }}/logs.txt">Export .txt</a></div>
-      </div>
-      <div class="card-body"><div id="logOutput" class="reghub-log">{% for item in operation.logs %}<div class="reghub-log-line" data-sequence="{{ item.sequence }}" data-level="{{ item.level }}">{{ item.created_at.isoformat() }} [{{ item.level|upper }}] {{ item.message }}</div>{% endfor %}</div></div>
+    <div class="btn-list">
+      <a class="btn btn-outline-secondary" href="/admin/operations">
+        <i class="fa-solid fa-list me-1"></i>All operations
+      </a>
+      {% if operation.return_url %}
+      <a class="btn btn-outline-primary" href="{{ operation.return_url }}">
+        <i class="fa-solid fa-arrow-left me-1"></i>Back to previous page
+      </a>
+      {% endif %}
     </div>
   </div>
-  <div class="col-lg-4">
-    <div class="card">
-      <div class="card-header"><h3 class="card-title">Operation controls</h3></div>
-      <div class="card-body">
-        <dl class="row"><dt class="col-5">Requested by</dt><dd class="col-7">{{ operation.requested_by or 'system' }}</dd><dt class="col-5">Created</dt><dd class="col-7">{{ operation.created_at }}</dd><dt class="col-5">Started</dt><dd class="col-7">{{ operation.started_at or '-' }}</dd><dt class="col-5">Completed</dt><dd id="completedAt" class="col-7">{{ operation.completed_at or '-' }}</dd></dl>
-        <div class="d-grid gap-2">
-          <form id="cancelForm" method="post" action="/admin/operations/{{ operation.id }}/cancel" class="{% if terminal %}d-none{% endif %}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-warning w-100" type="submit">Cancel operation</button></form>
-          <form id="retryForm" method="post" action="/admin/operations/{{ operation.id }}/retry" class="{% if operation.status.value not in ['failed','cancelled'] %}d-none{% endif %}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-primary w-100" type="submit">Retry operation</button></form>
+
+  <div class="row row-cards">
+    <div class="col-xl-8">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h3 class="card-title">Live progress</h3>
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <span id="connectionBadge" class="badge bg-secondary-lt"><span class="reghub-connection-dot"></span>Connecting</span>
+            <span id="statusBadge" class="badge">{{ operation.status.value }}</span>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="d-flex justify-content-between gap-2 mb-2">
+            <span id="statusText">{{ operation.status.value|title }}</span>
+            <strong id="progressText">{{ operation.progress }}%</strong>
+          </div>
+          <div class="progress progress-lg" aria-label="Operation progress">
+            <div id="progressBar" class="progress-bar" role="progressbar" style="width:{{ operation.progress }}%" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ operation.progress }}"></div>
+          </div>
+          <div class="d-flex flex-wrap justify-content-between gap-2 mt-2 small text-secondary">
+            <span id="lastUpdateText">Waiting for live status…</span>
+            <button id="refreshOperation" type="button" class="btn btn-sm btn-ghost-secondary">Refresh now</button>
+          </div>
+          <div id="errorBox" class="alert alert-danger mt-3 {% if not operation.error_message %}d-none{% endif %}" role="alert">{{ operation.error_message or '' }}</div>
+          <div id="resultBox" class="alert alert-success mt-3 {% if operation.status.value != 'succeeded' %}d-none{% endif %}" role="status">Operation completed successfully.</div>
+          <noscript><div class="alert alert-warning mt-3 mb-0">JavaScript is disabled. Use “Refresh now” in your browser to see updated progress.</div></noscript>
+        </div>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <div>
+            <h3 class="card-title mb-0">Debug logs</h3>
+            <div class="text-secondary small">Logs remain readable even if the live connection falls back to polling.</div>
+          </div>
+          <div class="btn-list">
+            <button id="copyLogs" type="button" class="btn btn-sm btn-outline-secondary">Copy logs</button>
+            <a class="btn btn-sm btn-outline-secondary" href="/admin/operations/{{ operation.id }}/logs.txt">Export .txt</a>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="logOutput" class="reghub-log-panel" role="log" aria-live="polite" aria-label="Operation debug logs">
+            {% for item in operation.logs %}
+            <div class="reghub-log-line" data-sequence="{{ item.sequence }}" data-level="{{ item.level }}">{{ item.created_at.isoformat() }} [{{ item.level|upper }}] {{ item.message }}</div>
+            {% else %}
+            <div id="emptyLogMessage" class="text-secondary">No logs have been recorded yet. Waiting for the operation runner…</div>
+            {% endfor %}
+          </div>
         </div>
       </div>
     </div>
-    {% if operation.result_payload %}<div class="card mt-3"><div class="card-header"><h3 class="card-title">Result</h3></div><div class="card-body"><pre id="resultJson" class="small mb-0">{{ operation.result_payload | tojson(indent=2) }}</pre></div></div>{% endif %}
+
+    <div class="col-xl-4">
+      <div class="card">
+        <div class="card-header"><h3 class="card-title">Operation controls</h3></div>
+        <div class="card-body">
+          <dl class="row mb-0">
+            <dt class="col-5">Requested by</dt><dd class="col-7">{{ operation.requested_by or 'system' }}</dd>
+            <dt class="col-5">Created</dt><dd class="col-7">{{ operation.created_at }}</dd>
+            <dt class="col-5">Started</dt><dd class="col-7">{{ operation.started_at or '-' }}</dd>
+            <dt class="col-5">Completed</dt><dd id="completedAt" class="col-7">{{ operation.completed_at or '-' }}</dd>
+          </dl>
+          <div class="d-grid gap-2 mt-3">
+            <form id="cancelForm" method="post" action="/admin/operations/{{ operation.id }}/cancel" class="{% if terminal %}d-none{% endif %}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-warning w-100" type="submit">Cancel operation</button>
+            </form>
+            <form id="retryForm" method="post" action="/admin/operations/{{ operation.id }}/retry" class="{% if operation.status.value not in ['failed','cancelled'] %}d-none{% endif %}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="btn btn-primary w-100" type="submit">Retry operation</button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <div id="resultCard" class="card mt-3 {% if not operation.result_payload %}d-none{% endif %}">
+        <div class="card-header"><h3 class="card-title">Result</h3></div>
+        <div class="card-body">
+          <pre id="resultJson" class="small mb-0" style="max-height:40vh;overflow:auto">{% if operation.result_payload %}{{ operation.result_payload | tojson(indent=2) }}{% endif %}</pre>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
+
 <script>
 (() => {
   const operationId = {{ operation.id|string|tojson }};
+  const urls = {
+    status: `/admin/operations/${operationId}/status`,
+    logs: `/admin/operations/${operationId}/logs.json`,
+    events: `/admin/operations/${operationId}/events`,
+  };
+
   const output = document.getElementById('logOutput');
   const progressBar = document.getElementById('progressBar');
   const progressText = document.getElementById('progressText');
   const statusText = document.getElementById('statusText');
   const badge = document.getElementById('statusBadge');
+  const connectionBadge = document.getElementById('connectionBadge');
+  const lastUpdateText = document.getElementById('lastUpdateText');
   const errorBox = document.getElementById('errorBox');
   const resultBox = document.getElementById('resultBox');
+  const resultCard = document.getElementById('resultCard');
+  const resultJson = document.getElementById('resultJson');
   const cancelForm = document.getElementById('cancelForm');
   const retryForm = document.getElementById('retryForm');
+  const refreshButton = document.getElementById('refreshOperation');
+  const copyButton = document.getElementById('copyLogs');
+  const terminal = new Set(['succeeded', 'failed', 'cancelled']);
+
   let lastSequence = 0;
-  output.querySelectorAll('[data-sequence]').forEach(el => { lastSequence = Math.max(lastSequence, Number(el.dataset.sequence || 0)); });
-  const terminal = new Set(['succeeded','failed','cancelled']);
+  let eventSource = null;
+  let pollingTimer = null;
+  let consecutiveStreamErrors = 0;
+  let currentStatus = {{ operation.status.value|tojson }};
+
+  output.querySelectorAll('[data-sequence]').forEach(element => {
+    lastSequence = Math.max(lastSequence, Number(element.dataset.sequence || 0));
+  });
+
+  function setConnection(mode, tone = 'secondary') {
+    const labels = {
+      live: 'Live stream',
+      polling: 'Polling fallback',
+      connecting: 'Connecting',
+      complete: 'Completed',
+      offline: 'Connection issue',
+    };
+    connectionBadge.className = `badge bg-${tone}-lt`;
+    connectionBadge.innerHTML = `<span class="reghub-connection-dot"></span>${labels[mode] || mode}`;
+  }
+
+  function markUpdated() {
+    lastUpdateText.textContent = `Last update: ${new Date().toLocaleTimeString()}`;
+  }
+
   function setStatus(data) {
-    const value = data.status || 'queued';
-    const progress = Number(data.progress || 0);
+    const value = String(data.status || currentStatus || 'queued');
+    const progress = Math.max(0, Math.min(100, Number(data.progress || 0)));
+    currentStatus = value;
     statusText.textContent = value.charAt(0).toUpperCase() + value.slice(1);
     progressText.textContent = `${progress}%`;
     progressBar.style.width = `${progress}%`;
+    progressBar.setAttribute('aria-valuenow', String(progress));
     badge.textContent = value;
     badge.className = `badge bg-${value === 'succeeded' ? 'green' : value === 'failed' ? 'red' : value === 'running' ? 'yellow' : value === 'cancelled' ? 'secondary' : 'blue'}-lt`;
     badge.classList.toggle('reghub-pulse', value === 'running' || value === 'queued');
-    if (data.error) { errorBox.textContent = data.error; errorBox.classList.remove('d-none'); }
-    if (value === 'succeeded') resultBox.classList.remove('d-none');
+
+    if (data.error) {
+      errorBox.textContent = data.error;
+      errorBox.classList.remove('d-none');
+    } else if (value !== 'failed') {
+      errorBox.classList.add('d-none');
+    }
+
+    if (value === 'succeeded') {
+      resultBox.classList.remove('d-none');
+    }
+
+    if (data.result) {
+      resultJson.textContent = JSON.stringify(data.result, null, 2);
+      resultCard.classList.remove('d-none');
+    }
+
+    if (data.completed_at) {
+      document.getElementById('completedAt').textContent = data.completed_at;
+    }
+
     if (terminal.has(value)) {
       cancelForm.classList.add('d-none');
-      retryForm.classList.toggle('d-none', !['failed','cancelled'].includes(value));
+      retryForm.classList.toggle('d-none', !['failed', 'cancelled'].includes(value));
+      setConnection('complete', value === 'succeeded' ? 'green' : value === 'failed' ? 'red' : 'secondary');
+      stopLiveUpdates();
     }
+    markUpdated();
   }
+
   function addLog(data) {
-    if (Number(data.sequence || 0) <= lastSequence) return;
-    lastSequence = Number(data.sequence || lastSequence);
+    const sequence = Number(data.sequence || 0);
+    if (sequence && sequence <= lastSequence) return;
+    if (sequence) lastSequence = sequence;
+    const empty = document.getElementById('emptyLogMessage');
+    if (empty) empty.remove();
     const line = document.createElement('div');
     line.className = 'reghub-log-line';
-    line.dataset.sequence = data.sequence;
+    line.dataset.sequence = String(sequence || lastSequence);
     line.dataset.level = data.level || 'info';
     line.textContent = `${data.created_at || ''} [${String(data.level || 'info').toUpperCase()}] ${data.message || ''}`;
     output.appendChild(line);
     output.scrollTop = output.scrollHeight;
   }
-  const events = new EventSource(`/admin/operations/${operationId}/events?after=${lastSequence}`);
-  events.addEventListener('log', event => { const data = JSON.parse(event.data); addLog(data); setStatus(data); });
-  events.addEventListener('status', event => setStatus(JSON.parse(event.data)));
-  events.addEventListener('done', event => { setStatus(JSON.parse(event.data)); events.close(); });
-  events.onerror = () => { if (!terminal.has(badge.textContent)) statusText.textContent = 'Reconnecting to operation logs…'; };
-  document.getElementById('copyLogs').addEventListener('click', async () => {
-    const text = Array.from(output.querySelectorAll('.reghub-log-line')).map(el => el.textContent).join('\n');
-    await navigator.clipboard.writeText(text);
-    document.getElementById('copyLogs').textContent = 'Copied';
-    setTimeout(() => document.getElementById('copyLogs').textContent = 'Copy logs', 1400);
+
+  async function fetchJson(url) {
+    const response = await fetch(url, {
+      credentials: 'same-origin',
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    return response.json();
+  }
+
+  async function pollOnce() {
+    try {
+      const [status, logsPayload] = await Promise.all([
+        fetchJson(urls.status),
+        fetchJson(`${urls.logs}?after=${lastSequence}`),
+      ]);
+      (logsPayload.logs || []).forEach(addLog);
+      setStatus(status);
+      if (!terminal.has(currentStatus) && (!eventSource || eventSource.readyState === EventSource.CLOSED)) {
+        setConnection('polling', 'blue');
+      }
+    } catch (error) {
+      setConnection('offline', 'red');
+      lastUpdateText.textContent = `Live update failed: ${error.message}. Retrying…`;
+    }
+  }
+
+  function startPolling() {
+    if (pollingTimer || terminal.has(currentStatus)) return;
+    setConnection('polling', 'blue');
+    pollOnce();
+    pollingTimer = window.setInterval(pollOnce, 1500);
+  }
+
+  function stopLiveUpdates() {
+    if (eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+    if (pollingTimer) {
+      window.clearInterval(pollingTimer);
+      pollingTimer = null;
+    }
+  }
+
+  function startEventStream() {
+    if (!('EventSource' in window) || terminal.has(currentStatus)) {
+      startPolling();
+      return;
+    }
+    setConnection('connecting', 'secondary');
+    eventSource = new EventSource(`${urls.events}?after=${lastSequence}`);
+    eventSource.onopen = () => {
+      consecutiveStreamErrors = 0;
+      setConnection('live', 'green');
+      if (pollingTimer) {
+        window.clearInterval(pollingTimer);
+        pollingTimer = null;
+      }
+    };
+    eventSource.addEventListener('log', event => {
+      const data = JSON.parse(event.data);
+      addLog(data);
+      setStatus(data);
+    });
+    eventSource.addEventListener('status', event => setStatus(JSON.parse(event.data)));
+    eventSource.addEventListener('done', event => {
+      setStatus(JSON.parse(event.data));
+      stopLiveUpdates();
+    });
+    eventSource.onerror = () => {
+      consecutiveStreamErrors += 1;
+      setConnection('offline', 'yellow');
+      if (consecutiveStreamErrors >= 2) {
+        eventSource.close();
+        eventSource = null;
+        startPolling();
+      }
+    };
+  }
+
+  function copyWithFallback(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text);
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+    return Promise.resolve();
+  }
+
+  copyButton.addEventListener('click', async () => {
+    const text = Array.from(output.querySelectorAll('.reghub-log-line')).map(element => element.textContent).join('\n');
+    try {
+      await copyWithFallback(text);
+      copyButton.textContent = 'Copied';
+    } catch (_error) {
+      copyButton.textContent = 'Copy failed';
+    }
+    window.setTimeout(() => { copyButton.textContent = 'Copy logs'; }, 1400);
   });
+
+  refreshButton.addEventListener('click', pollOnce);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && !terminal.has(currentStatus)) pollOnce();
+  });
+  window.addEventListener('beforeunload', stopLiveUpdates);
+
+  pollOnce();
+  startEventStream();
 })();
 </script>
 {% endblock %}

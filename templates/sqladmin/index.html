@@ -1,5 +1,5 @@
-{% extends "sqladmin/layout.html" %}
-{% block content %}
+{% extends "reghub_layout.html" %}
+{% block reghub_content %}
 <div class="row row-cards">
   {% for label, value in [
     ('Templates', template_count),
@@ -10,11 +10,10 @@
     ('Failed Imports', failed_import_count)
   ] %}
   <div class="col-sm-6 col-lg-4">
-    <div class="card card-sm">
+    <div class="card card-sm h-100">
       <div class="card-body">
-        <div class="row align-items-center">
-          <div class="col"><div class="font-weight-medium">{{ label }}</div><div class="text-secondary">{{ value }}</div></div>
-        </div>
+        <div class="font-weight-medium">{{ label }}</div>
+        <div class="display-6 mt-1">{{ value }}</div>
       </div>
     </div>
   </div>

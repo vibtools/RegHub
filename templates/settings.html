@@ -1,80 +1,293 @@
-{% extends "sqladmin/layout.html" %}
-{% block content %}
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-  <div><h2 class="page-title">RegHub Settings</h2><div class="text-secondary">Runtime controls take effect immediately. No Coolify redeploy is required.</div></div>
-  <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="reload_runtime"><button class="btn btn-outline-secondary" type="submit">Reload runtime</button></form>
-</div>
-{% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
-{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
-<div class="alert alert-info"><strong>Security:</strong> API secrets are encrypted before database storage and are never rendered back into this page. Leave a secret field blank to keep the current value.</div>
-<form method="post" class="card mb-4">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="action" value="save_features">
-  <div class="card-header"><h3 class="card-title">Project feature control</h3></div>
-  <div class="card-body">
-    {% for category, features in feature_groups.items() %}
-    <h3 class="mt-2">{{ category }}</h3>
-    <div class="table-responsive mb-4"><table class="table table-vcenter"><thead><tr><th>Feature</th><th style="min-width:190px">Feature state</th><th style="min-width:230px">Admin task permission</th><th>Last changed by</th></tr></thead><tbody>
-      {% for item in features %}
-      <tr>
-        <td><strong>{{ item.name }}</strong><div class="text-secondary small">{{ item.description }}</div><code>{{ item.key }}</code></td>
-        <td><div class="btn-group" role="group"><input class="btn-check" type="radio" name="enabled__{{ item.key }}" id="enabled_on_{{ item.key }}" value="1" {% if item.enabled %}checked{% endif %}><label class="btn btn-outline-success" for="enabled_on_{{ item.key }}">ON</label><input class="btn-check" type="radio" name="enabled__{{ item.key }}" id="enabled_off_{{ item.key }}" value="0" {% if not item.enabled %}checked{% endif %}><label class="btn btn-outline-danger" for="enabled_off_{{ item.key }}">OFF</label></div></td>
-        <td><div class="btn-group" role="group"><input class="btn-check" type="radio" name="task__{{ item.key }}" id="task_on_{{ item.key }}" value="1" {% if item.admin_task_allowed %}checked{% endif %}><label class="btn btn-outline-primary" for="task_on_{{ item.key }}">ALLOW</label><input class="btn-check" type="radio" name="task__{{ item.key }}" id="task_off_{{ item.key }}" value="0" {% if not item.admin_task_allowed %}checked{% endif %}><label class="btn btn-outline-secondary" for="task_off_{{ item.key }}">BLOCK</label></div></td>
-        <td>{{ item.updated_by or 'Environment/default' }}</td>
-      </tr>
-      {% endfor %}
-    </tbody></table></div>
-    {% endfor %}
-  </div>
-  <div class="card-footer text-end"><button class="btn btn-primary" type="submit">Save all feature controls</button></div>
-</form>
-<div class="mb-3"><h2 class="page-title">Third-party integrations</h2><div class="text-secondary">Manage GitHub, GitLab, Bitbucket, AI, screenshot and custom API credentials without redeploying.</div></div>
-<div class="row row-cards">
-{% for card in integration_cards %}{% set item = card.row %}
-<div class="col-xl-6">
-  <div class="card h-100">
-    <form method="post">
+{% extends "reghub_layout.html" %}
+{% block reghub_content %}
+<div class="reghub-section-stack">
+  <div class="reghub-toolbar">
+    <div>
+      <h2 class="page-title mb-1">RegHub Settings</h2>
+      <div class="text-secondary">Runtime controls apply immediately. A Coolify redeploy is not required.</div>
+    </div>
+    <form method="post" class="m-0">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="card-header d-flex justify-content-between"><h3 class="card-title">{{ item.name }}</h3><span class="badge bg-{{ 'green' if card.status.effective_enabled else 'secondary' }}-lt">{{ 'Enabled' if card.status.effective_enabled else 'Disabled' }}</span></div>
-      <div class="card-body">
-        <div class="row g-3">
-          <div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="name" value="{{ item.name }}" required maxlength="160"></div>
-          <div class="col-md-6"><label class="form-label">Slug</label><input class="form-control" name="slug" value="{{ item.slug }}" {% if item.is_system %}readonly{% endif %} required></div>
-          <div class="col-md-6"><label class="form-label">Type</label><input class="form-control" name="integration_type" value="{{ item.integration_type }}" required></div>
-          <div class="col-md-6"><label class="form-label">State</label><select class="form-select" name="enabled"><option value="1" {% if item.enabled %}selected{% endif %}>ON</option><option value="0" {% if not item.enabled %}selected{% endif %}>OFF</option></select></div>
-          {% if card.status.integration_enabled and not card.status.feature_enabled %}<div class="col-12"><div class="alert alert-warning py-2 mb-0">Integration is ON, but its project feature is OFF. Enable the related feature above to use it.</div></div>{% endif %}
-          {% if card.status.integration_enabled and card.status.feature_enabled and not card.status.configured %}<div class="col-12"><div class="alert alert-warning py-2 mb-0">The feature and integration are ON, but required runtime credentials or URL are missing.</div></div>{% endif %}
-          <div class="col-12"><label class="form-label">Base URL</label>{% if item.slug in ['github','gitlab','bitbucket'] %}<input class="form-control" name="base_url" value="" readonly placeholder="Hosted provider endpoint is fixed by this adapter"><div class="form-hint">This release supports the hosted GitHub, GitLab, and Bitbucket endpoints. Runtime credentials and ON/OFF state are applied immediately.</div>{% else %}<input class="form-control" type="url" name="base_url" value="{{ item.base_url or '' }}" placeholder="https://api.example.com">{% endif %}</div>
-          <div class="col-md-6"><label class="form-label">Username / account</label><input class="form-control" name="username" value="{{ item.username or '' }}" autocomplete="off"></div>
-          <div class="col-md-6"><label class="form-label">API token / password</label><input class="form-control" type="password" name="secret" value="" autocomplete="new-password" placeholder="{{ 'Configured — blank keeps it' if card.status.secret_configured else 'Not configured' }}"></div>
-          <div class="col-12"><label class="form-label">Non-secret config JSON</label><textarea class="form-control font-monospace" name="config_json" rows="5">{{ card.config_json }}</textarea></div>
-          <div class="col-md-6"><label class="form-check"><input class="form-check-input" type="checkbox" name="use_environment_fallback" value="1" {% if item.use_environment_fallback %}checked{% endif %}><span class="form-check-label">Use Coolify ENV as fallback</span></label></div>
-          <div class="col-md-6"><label class="form-check"><input class="form-check-input" type="checkbox" name="clear_secret" value="1"><span class="form-check-label text-danger">Clear runtime secret</span></label></div>
+      <input type="hidden" name="action" value="reload_runtime">
+      <button class="btn btn-outline-secondary" type="submit">
+        <i class="fa-solid fa-rotate me-1"></i>Reload runtime
+      </button>
+    </form>
+  </div>
+
+  {% if success %}<div class="alert alert-success mb-0" role="status">{{ success }}</div>{% endif %}
+  {% if error %}<div class="alert alert-danger mb-0" role="alert">{{ error }}</div>{% endif %}
+
+  <div class="alert alert-info mb-0">
+    <strong>Secret safety:</strong> credentials are encrypted before database storage and are never rendered back into this page. Leave a secret field blank to preserve the current value.
+  </div>
+
+  <div class="card">
+    <div class="card-header pb-0">
+      <ul class="nav nav-tabs card-header-tabs" id="settingsTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="features-tab" data-bs-toggle="tab" data-bs-target="#features-pane" type="button" role="tab" aria-controls="features-pane" aria-selected="true">
+            <i class="fa-solid fa-toggle-on me-1"></i>Feature controls
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="integrations-tab" data-bs-toggle="tab" data-bs-target="#integrations-pane" type="button" role="tab" aria-controls="integrations-pane" aria-selected="false">
+            <i class="fa-solid fa-plug me-1"></i>Integrations
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="custom-api-tab" data-bs-toggle="tab" data-bs-target="#custom-api-pane" type="button" role="tab" aria-controls="custom-api-pane" aria-selected="false">
+            <i class="fa-solid fa-plus me-1"></i>Add custom API
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <div class="tab-content">
+      <div class="tab-pane fade show active" id="features-pane" role="tabpanel" aria-labelledby="features-tab" tabindex="0">
+        <form method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="save_features">
+          <div class="card-body">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+              <div>
+                <h3 class="card-title mb-1">Project feature control</h3>
+                <div class="text-secondary">Feature state and administrator task permission are controlled independently.</div>
+              </div>
+              <span class="badge bg-blue-lt">Runtime</span>
+            </div>
+
+            <div class="accordion" id="featureAccordion">
+              {% for category, features in feature_groups.items() %}
+              {% set category_id = 'feature-category-' ~ loop.index %}
+              <div class="accordion-item">
+                <h2 class="accordion-header" id="{{ category_id }}-header">
+                  <button class="accordion-button {% if not loop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#{{ category_id }}" aria-expanded="{{ 'true' if loop.first else 'false' }}" aria-controls="{{ category_id }}">
+                    <span class="fw-semibold">{{ category }}</span>
+                    <span class="badge bg-secondary-lt ms-2">{{ features|length }}</span>
+                  </button>
+                </h2>
+                <div id="{{ category_id }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" aria-labelledby="{{ category_id }}-header" data-bs-parent="#featureAccordion">
+                  <div class="accordion-body p-0">
+                    <div class="table-responsive">
+                      <table class="table table-vcenter card-table">
+                        <thead>
+                          <tr>
+                            <th style="min-width:260px">Feature</th>
+                            <th style="min-width:180px">Feature state</th>
+                            <th style="min-width:220px">Admin permission</th>
+                            <th style="min-width:160px">Last changed by</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for item in features %}
+                          <tr>
+                            <td>
+                              <strong>{{ item.name }}</strong>
+                              <div class="text-secondary small">{{ item.description }}</div>
+                              <code class="reghub-wrap">{{ item.key }}</code>
+                            </td>
+                            <td>
+                              <div class="btn-group" role="group" aria-label="{{ item.name }} state">
+                                <input class="btn-check" type="radio" name="enabled__{{ item.key }}" id="enabled_on_{{ item.key }}" value="1" {% if item.enabled %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-success" for="enabled_on_{{ item.key }}">ON</label>
+                                <input class="btn-check" type="radio" name="enabled__{{ item.key }}" id="enabled_off_{{ item.key }}" value="0" {% if not item.enabled %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-danger" for="enabled_off_{{ item.key }}">OFF</label>
+                              </div>
+                            </td>
+                            <td>
+                              <div class="btn-group" role="group" aria-label="{{ item.name }} administrator permission">
+                                <input class="btn-check" type="radio" name="task__{{ item.key }}" id="task_on_{{ item.key }}" value="1" {% if item.admin_task_allowed %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-primary" for="task_on_{{ item.key }}">ALLOW</label>
+                                <input class="btn-check" type="radio" name="task__{{ item.key }}" id="task_off_{{ item.key }}" value="0" {% if not item.admin_task_allowed %}checked{% endif %}>
+                                <label class="btn btn-sm btn-outline-secondary" for="task_off_{{ item.key }}">BLOCK</label>
+                              </div>
+                            </td>
+                            <td class="text-secondary small">{{ item.updated_by or 'Environment/default' }}</td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="card-footer reghub-sticky-actions d-flex justify-content-end">
+            <button class="btn btn-primary" type="submit">
+              <i class="fa-solid fa-floppy-disk me-1"></i>Save feature controls
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <div class="tab-pane fade" id="integrations-pane" role="tabpanel" aria-labelledby="integrations-tab" tabindex="0">
+        <div class="card-body">
+          <div class="mb-3">
+            <h3 class="card-title mb-1">Third-party integrations</h3>
+            <div class="text-secondary">Only one integration editor is expanded at a time, keeping this page compact and responsive.</div>
+          </div>
+
+          <div class="accordion" id="integrationAccordion">
+            {% for card in integration_cards %}
+            {% set item = card.row %}
+            {% set panel_id = 'integration-' ~ loop.index %}
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="{{ panel_id }}-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#{{ panel_id }}" aria-expanded="false" aria-controls="{{ panel_id }}">
+                  <span class="d-flex flex-wrap align-items-center gap-2 w-100 pe-3">
+                    <span class="fw-semibold">{{ item.name }}</span>
+                    <code class="small reghub-wrap">{{ item.slug }}</code>
+                    <span class="badge bg-{{ 'green' if card.status.effective_enabled else 'secondary' }}-lt ms-auto">{{ 'Enabled' if card.status.effective_enabled else 'Disabled' }}</span>
+                    <span class="badge bg-{{ 'blue' if card.status.configured else 'yellow' }}-lt">{{ 'Configured' if card.status.configured else 'Needs configuration' }}</span>
+                  </span>
+                </button>
+              </h2>
+              <div id="{{ panel_id }}" class="accordion-collapse collapse" aria-labelledby="{{ panel_id }}-header" data-bs-parent="#integrationAccordion">
+                <div class="accordion-body">
+                  <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    {% if card.status.integration_enabled and not card.status.feature_enabled %}
+                    <div class="alert alert-warning py-2">Integration is ON, but its project feature is OFF. Enable the related feature in the Feature controls tab.</div>
+                    {% endif %}
+                    {% if card.status.integration_enabled and card.status.feature_enabled and not card.status.configured %}
+                    <div class="alert alert-warning py-2">The integration is ON, but required credentials or URL are missing.</div>
+                    {% endif %}
+
+                    <div class="row g-3">
+                      <div class="col-md-6">
+                        <label class="form-label">Name</label>
+                        <input class="form-control" name="name" value="{{ item.name }}" required maxlength="160">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">Slug</label>
+                        <input class="form-control" name="slug" value="{{ item.slug }}" {% if item.is_system %}readonly{% endif %} required>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">Type</label>
+                        <input class="form-control" name="integration_type" value="{{ item.integration_type }}" required>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">State</label>
+                        <select class="form-select" name="enabled">
+                          <option value="1" {% if item.enabled %}selected{% endif %}>ON</option>
+                          <option value="0" {% if not item.enabled %}selected{% endif %}>OFF</option>
+                        </select>
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label">Base URL</label>
+                        {% if item.slug in ['github','gitlab','bitbucket'] %}
+                        <input class="form-control" name="base_url" value="" readonly placeholder="Hosted provider endpoint is fixed by this adapter">
+                        <div class="form-hint">This adapter uses the hosted {{ item.name }} endpoint. Runtime credentials and ON/OFF state apply immediately.</div>
+                        {% else %}
+                        <input class="form-control" type="url" name="base_url" value="{{ item.base_url or '' }}" placeholder="https://api.example.com">
+                        {% endif %}
+                      </div>
+
+                      <div class="col-md-6">
+                        <label class="form-label">Username / account</label>
+                        <input class="form-control" name="username" value="{{ item.username or '' }}" autocomplete="off">
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-label">API token / password</label>
+                        <input class="form-control" type="password" name="secret" value="" autocomplete="new-password" placeholder="{{ 'Configured — blank keeps it' if card.status.secret_configured else 'Not configured' }}">
+                      </div>
+
+                      <div class="col-12">
+                        <label class="form-label">Non-secret config JSON</label>
+                        <textarea class="form-control font-monospace reghub-json-editor" name="config_json" rows="6" spellcheck="false">{{ card.config_json }}</textarea>
+                      </div>
+
+                      <div class="col-md-6">
+                        <label class="form-check">
+                          <input class="form-check-input" type="checkbox" name="use_environment_fallback" value="1" {% if item.use_environment_fallback %}checked{% endif %}>
+                          <span class="form-check-label">Use Coolify ENV as fallback</span>
+                        </label>
+                      </div>
+                      <div class="col-md-6">
+                        <label class="form-check">
+                          <input class="form-check-input" type="checkbox" name="clear_secret" value="1">
+                          <span class="form-check-label text-danger">Clear runtime secret</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap justify-content-between gap-2 mt-4">
+                      <button class="btn btn-primary" type="submit" name="action" value="save_integration">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>Save and apply
+                      </button>
+                      <button class="btn btn-outline-danger" type="submit" name="action" value="remove_integration" onclick="return confirm('Remove or disable this runtime integration?')">
+                        Remove runtime config
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            {% else %}
+            <div class="empty py-5">
+              <p class="empty-title">No integrations configured</p>
+            </div>
+            {% endfor %}
+          </div>
         </div>
       </div>
-      <div class="card-footer d-flex justify-content-between"><button class="btn btn-primary" type="submit" name="action" value="save_integration">Save and apply</button><button class="btn btn-outline-danger" type="submit" name="action" value="remove_integration" onclick="return confirm('Remove or disable this runtime integration?')">Remove runtime config</button></div>
-    </form>
+
+      <div class="tab-pane fade" id="custom-api-pane" role="tabpanel" aria-labelledby="custom-api-tab" tabindex="0">
+        <div class="card-body">
+          <div class="reghub-content-narrow">
+            <div class="mb-3">
+              <h3 class="card-title mb-1">Add custom third-party API</h3>
+              <div class="text-secondary">This stores secure runtime configuration. Provider-specific code must explicitly consume the integration before it can run a workflow.</div>
+            </div>
+            <form method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <div class="row g-3">
+                <div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="name" required maxlength="160"></div>
+                <div class="col-md-6"><label class="form-label">Slug</label><input class="form-control" name="slug" placeholder="my-api" required></div>
+                <div class="col-md-6"><label class="form-label">Type</label><input class="form-control" name="integration_type" value="custom"></div>
+                <div class="col-md-6"><label class="form-label">State</label><select class="form-select" name="enabled"><option value="1">ON</option><option value="0">OFF</option></select></div>
+                <div class="col-12"><label class="form-label">Base URL</label><input class="form-control" type="url" name="base_url" placeholder="https://api.example.com"></div>
+                <div class="col-md-6"><label class="form-label">Username</label><input class="form-control" name="username"></div>
+                <div class="col-md-6"><label class="form-label">API token / password</label><input class="form-control" type="password" name="secret" autocomplete="new-password"></div>
+                <div class="col-12"><label class="form-label">Config JSON</label><textarea class="form-control font-monospace reghub-json-editor" name="config_json" rows="6" spellcheck="false">{}</textarea></div>
+                <input type="hidden" name="use_environment_fallback" value="0">
+                <input type="hidden" name="clear_secret" value="0">
+              </div>
+              <div class="text-end mt-4">
+                <button class="btn btn-primary" type="submit" name="action" value="save_integration">
+                  <i class="fa-solid fa-plus me-1"></i>Add API configuration
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
-{% endfor %}
-<div class="col-xl-6">
-  <div class="card h-100">
-    <form method="post">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="card-header"><h3 class="card-title">Add custom third-party API</h3></div>
-      <div class="card-body"><div class="row g-3">
-        <div class="col-md-6"><label class="form-label">Name</label><input class="form-control" name="name" required></div>
-        <div class="col-md-6"><label class="form-label">Slug</label><input class="form-control" name="slug" placeholder="my-api" required></div>
-        <div class="col-md-6"><label class="form-label">Type</label><input class="form-control" name="integration_type" value="custom"></div>
-        <div class="col-md-6"><label class="form-label">State</label><select class="form-select" name="enabled"><option value="1">ON</option><option value="0">OFF</option></select></div>
-        <div class="col-12"><label class="form-label">Base URL</label><input class="form-control" type="url" name="base_url" placeholder="https://api.example.com"></div>
-        <div class="col-md-6"><label class="form-label">Username</label><input class="form-control" name="username"></div>
-        <div class="col-md-6"><label class="form-label">API token / password</label><input class="form-control" type="password" name="secret" autocomplete="new-password"></div>
-        <div class="col-12"><label class="form-label">Config JSON</label><textarea class="form-control font-monospace" name="config_json" rows="5">{}</textarea></div>
-        <input type="hidden" name="use_environment_fallback" value="0"><input type="hidden" name="clear_secret" value="0">
-      </div></div>
-      <div class="card-footer text-end"><button class="btn btn-primary" type="submit" name="action" value="save_integration">Add API configuration</button></div>
-    </form>
-  </div>
-</div>
-</div>
+
+<script>
+(() => {
+  const storageKey = 'reghub-settings-active-tab';
+  const tabButtons = Array.from(document.querySelectorAll('#settingsTabs [data-bs-toggle="tab"]'));
+  const requested = window.location.hash || window.sessionStorage.getItem(storageKey);
+  if (requested) {
+    const button = tabButtons.find(item => item.dataset.bsTarget === requested);
+    if (button && window.bootstrap) {
+      window.bootstrap.Tab.getOrCreateInstance(button).show();
+    }
+  }
+  tabButtons.forEach(button => {
+    button.addEventListener('shown.bs.tab', event => {
+      const target = event.target.dataset.bsTarget;
+      window.sessionStorage.setItem(storageKey, target);
+      history.replaceState(null, '', target);
+    });
+  });
+})();
+</script>
 {% endblock %}

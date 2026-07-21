@@ -1,48 +1,51 @@
-{% extends "sqladmin/layout.html" %}
-{% block content %}
-<div class="row">
-  <div class="col-lg-8">
-    <div class="card">
-      <div class="card-header"><h3 class="card-title">GitHub metadata import</h3></div>
-      <div class="card-body">
-        <div class="alert alert-info">Import runs as a background operation. The next page shows live progress, debug logs, copy and export controls.</div>
-        {% if not feature_flag_enabled %}<div class="alert alert-danger">GitHub Import is OFF or its administrator task permission is blocked in RegHub Settings.</div>{% elif not integration_enabled %}<div class="alert alert-danger">The GitHub integration is OFF in RegHub Settings.</div>{% endif %}
-        {% if github_authenticated %}
-          <div class="alert alert-success" role="status">
-            GitHub API: authenticated with the server-side GITHUB_TOKEN.
-          </div>
-        {% else %}
-          <div class="alert alert-warning" role="status">
-            GitHub API: unauthenticated mode. Public imports work, but rate limits are lower.
-          </div>
-        {% endif %}
-        {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
-        {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
-        <form method="post" autocomplete="off">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <div class="mb-3">
-            <label class="form-label">Repository URL</label>
-            <input class="form-control" type="url" name="repository_url" required maxlength="500"
-              placeholder="https://github.com/owner/repository">
-          </div>
-          <div class="mb-3">
+{% extends "reghub_layout.html" %}
+{% block reghub_content %}
+<div class="reghub-content-narrow">
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">GitHub metadata import</h3></div>
+    <div class="card-body">
+      <div class="alert alert-info">After submission, RegHub opens the Operations Console with live progress, debug logs, copy and export controls.</div>
+      {% if not feature_flag_enabled %}<div class="alert alert-danger">GitHub Import is OFF or its administrator task permission is blocked in Settings.</div>{% elif not integration_enabled %}<div class="alert alert-danger">The GitHub integration is OFF in Settings.</div>{% endif %}
+      {% if github_authenticated %}
+      <div class="alert alert-success" role="status">GitHub API is authenticated with a server-side token.</div>
+      {% else %}
+      <div class="alert alert-warning" role="status">GitHub API is using unauthenticated mode. Public imports work, but rate limits are lower.</div>
+      {% endif %}
+      {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+      {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+
+      <form method="post" autocomplete="off" data-reghub-operation-form>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="mb-3">
+          <label class="form-label">Repository URL</label>
+          <input class="form-control" type="url" name="repository_url" required maxlength="500" placeholder="https://github.com/owner/repository">
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
             <label class="form-label">Category</label>
-            <select class="form-select" name="category_id">
-              <option value="">Not assigned</option>
-              {% for item in categories %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}
-            </select>
+            <select class="form-select" name="category_id"><option value="">Auto detect</option>{% for item in categories %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select>
           </div>
-          <div class="mb-3">
+          <div class="col-md-6">
             <label class="form-label">Provider</label>
-            <select class="form-select" name="provider_id">
-              <option value="">Not assigned</option>
-              {% for item in providers %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}
-            </select>
+            <select class="form-select" name="provider_id"><option value="">Auto assign from repository owner</option>{% for item in providers %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select>
           </div>
-          <button class="btn btn-primary" type="submit" {% if not feature_enabled %}disabled{% endif %}>Start Import Operation</button>
-        </form>
-      </div>
+        </div>
+        <div class="mt-4">
+          <button class="btn btn-primary" type="submit" {% if not feature_enabled %}disabled{% endif %}>
+            <span class="reghub-submit-label">Start Import Operation</span>
+            <span class="reghub-submit-state align-items-center gap-2"><span class="spinner-border spinner-border-sm" aria-hidden="true"></span>Creating operation…</span>
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
+<script>
+document.querySelectorAll('form[data-reghub-operation-form]').forEach(form => {
+  form.addEventListener('submit', () => {
+    form.setAttribute('aria-busy', 'true');
+    form.querySelectorAll('button[type="submit"]').forEach(button => button.disabled = true);
+  });
+});
+</script>
 {% endblock %}

@@ -1,21 +1,39 @@
-{% extends "sqladmin/layout.html" %}
-{% block content %}
-<div class="row"><div class="col-lg-8"><div class="card">
-<div class="card-header"><h3 class="card-title">GitLab / Bitbucket metadata import</h3></div>
-<div class="card-body"><div class="alert alert-info">Import runs in the Operations Console with live progress and downloadable logs.</div>
-{% if gitlab_authenticated %}<div class="alert alert-success">GitLab token configured.</div>{% endif %}
-{% if bitbucket_authenticated %}<div class="alert alert-success">Bitbucket credentials configured.</div>{% endif %}
-{% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
-{% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
-<form method="post" autocomplete="off">
-<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-<div class="mb-3"><label class="form-label">Registry</label><select class="form-select" name="adapter" required>
-{% for adapter in adapters %}<option value="{{ adapter }}">{{ adapter|title }}</option>{% endfor %}
-</select></div>
-<div class="mb-3"><label class="form-label">Repository URL</label>
-<input class="form-control" type="url" name="repository_url" required maxlength="500" placeholder="https://gitlab.com/group/repository or https://bitbucket.org/workspace/repository"></div>
-<div class="mb-3"><label class="form-label">Category</label><select class="form-select" name="category_id"><option value="">Auto detect</option>{% for item in categories %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select></div>
-<div class="mb-3"><label class="form-label">Provider</label><select class="form-select" name="provider_id"><option value="">Auto assign</option>{% for item in providers %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select></div>
-<button class="btn btn-primary" type="submit" {% if not adapters %}disabled{% endif %}>Start Import Operation</button>{% if not adapters %}<div class="form-text text-danger">GitLab and Bitbucket imports are currently disabled in Settings.</div>{% endif %}
-</form></div></div></div></div>
+{% extends "reghub_layout.html" %}
+{% block reghub_content %}
+<div class="reghub-content-narrow">
+  <div class="card">
+    <div class="card-header"><h3 class="card-title">GitLab / Bitbucket metadata import</h3></div>
+    <div class="card-body">
+      <div class="alert alert-info">After submission, RegHub opens the Operations Console with live progress and downloadable logs.</div>
+      {% if gitlab_authenticated %}<div class="alert alert-success">GitLab token configured.</div>{% endif %}
+      {% if bitbucket_authenticated %}<div class="alert alert-success">Bitbucket credentials configured.</div>{% endif %}
+      {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
+      {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+      <form method="post" autocomplete="off" data-reghub-operation-form>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="mb-3"><label class="form-label">Registry</label><select class="form-select" name="adapter" required>{% for adapter in adapters %}<option value="{{ adapter }}">{{ adapter|title }}</option>{% endfor %}</select></div>
+        <div class="mb-3"><label class="form-label">Repository URL</label><input class="form-control" type="url" name="repository_url" required maxlength="500" placeholder="https://gitlab.com/group/repository or https://bitbucket.org/workspace/repository"></div>
+        <div class="row g-3">
+          <div class="col-md-6"><label class="form-label">Category</label><select class="form-select" name="category_id"><option value="">Auto detect</option>{% for item in categories %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select></div>
+          <div class="col-md-6"><label class="form-label">Provider</label><select class="form-select" name="provider_id"><option value="">Auto assign from repository owner</option>{% for item in providers %}<option value="{{ item.id }}">{{ item.name }}</option>{% endfor %}</select></div>
+        </div>
+        <div class="mt-4">
+          <button class="btn btn-primary" type="submit" {% if not adapters %}disabled{% endif %}>
+            <span class="reghub-submit-label">Start Import Operation</span>
+            <span class="reghub-submit-state align-items-center gap-2"><span class="spinner-border spinner-border-sm"></span>Creating operation…</span>
+          </button>
+          {% if not adapters %}<div class="form-hint text-danger mt-2">GitLab and Bitbucket imports are currently disabled in Settings.</div>{% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+document.querySelectorAll('form[data-reghub-operation-form]').forEach(form => {
+  form.addEventListener('submit', () => {
+    form.setAttribute('aria-busy', 'true');
+    form.querySelectorAll('button[type="submit"]').forEach(button => button.disabled = true);
+  });
+});
+</script>
 {% endblock %}

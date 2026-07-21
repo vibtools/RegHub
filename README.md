@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.2.2 Operations Console & Runtime Settings**
+Current release: **v0.2.2.1 UI & Operations Hotfix**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or

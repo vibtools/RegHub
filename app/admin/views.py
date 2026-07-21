@@ -461,6 +461,35 @@ class OperationsConsoleView(_AdminBaseView):
             }
         )
 
+    @expose("/operations/{operation_id}/logs.json", methods=["GET"])
+    async def operation_logs_json(self, request: Request):
+        operation_id = UUID(request.path_params["operation_id"])
+        try:
+            sequence = max(0, int(request.query_params.get("after", "0") or 0))
+        except ValueError as exc:
+            raise ValidationError("The log sequence must be an integer") from exc
+        service = self._admin_ref.app.state.container.operation_service
+        operation = await service.get(operation_id)
+        logs = await service.logs_since(operation_id, sequence)
+        return JSONResponse(
+            {
+                "operation_id": str(operation_id),
+                "status": operation.status.value,
+                "progress": operation.progress,
+                "logs": [
+                    {
+                        "sequence": item.sequence,
+                        "level": item.level,
+                        "message": item.message,
+                        "data": item.data,
+                        "created_at": item.created_at.isoformat(),
+                    }
+                    for item in logs
+                ],
+            },
+            headers={"Cache-Control": "no-store"},
+        )
+
     @expose("/operations/{operation_id}/events", methods=["GET"])
     async def operation_events(self, request: Request):
         operation_id = UUID(request.path_params["operation_id"])
@@ -507,7 +536,7 @@ class OperationsConsoleView(_AdminBaseView):
             stream(),
             media_type="text/event-stream",
             headers={
-                "Cache-Control": "no-cache",
+                "Cache-Control": "no-cache, no-transform",
                 "X-Accel-Buffering": "no",
                 "Connection": "keep-alive",
             },

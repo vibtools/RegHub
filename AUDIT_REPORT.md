@@ -1,78 +1,91 @@
-# RegHub v0.2.2 Production Readiness Audit
+# RegHub v0.2.2.1 UI & Operations Hotfix — Forensic Audit
 
-## Baseline and zero-freedom compatibility
+## Baseline
 
-- Built from the running v0.2.1 replace-ready source.
-- No existing public endpoint, OIDC route, SQLAdmin model page, template field, publication status,
-  manifest behavior, provider/media capability, migration, Docker entrypoint, or deployment boundary
-  was removed.
-- Existing template IDs, slugs, database records, Keycloak settings, Coolify variables, and public
-  API paths remain compatible.
-- Migration `20260721_0004_operations_runtime_settings` is additive and creates only runtime feature,
-  integration, operation, and operation-log tables.
+The audit used the uploaded v0.2.2 replace-ready project as the immutable baseline. No existing
+feature, model, API path, OIDC route, migration, integration record, template record, or operation
+history behavior was removed.
 
-## Operations and administrator UX
+## Confirmed root cause
 
-- Repository imports, local imports, source synchronization, publication changes, thumbnail
-  generation, and screenshot retries run as persistent administrator operations.
-- Every operation records ordered logs, progress, status, requester, result, failure message,
-  timestamps, retry ancestry, and its originating administrator URL.
-- The operation detail page provides SSE live updates, progress, debug logs, copy/export, cancel,
-  retry, and context-preserving return navigation.
-- Interrupted running operations are marked failed after restart; queued operations are recovered.
+SQLAdmin's `sqladmin/layout.html` already places `{% block content %}` inside:
 
-## Runtime Settings
+```html
+<div class="row row-deck row-cards">...</div>
+```
 
-- Feature availability and administrator task permission are independently controlled at runtime.
-- GitHub, GitLab, Bitbucket, AI metadata, and screenshot integrations can be enabled, disabled, or
-  reconfigured without a Coolify redeploy.
-- Existing Coolify environment credentials remain optional bootstrap/fallback values.
-- Custom third-party API records can be securely added and removed. A custom integration is secure
-  runtime configuration storage; provider-specific code must explicitly consume it before it can
-  perform a new external workflow.
-- Health, readiness, authentication, and Settings remain available as recovery surfaces and cannot
-  be disabled from the public API switches.
+The v0.2.2 custom templates inserted several top-level elements directly inside that Bootstrap row.
+Those elements were not `.col-*` children, so Bootstrap treated each page section as an independent
+flex item. On common desktop and smaller widths this produced narrow vertical strips, unbounded page
+length, squeezed forms, unreadable API configuration controls, and apparently blank operation/log
+areas.
 
-## API corrections
+Affected custom pages:
 
-- PostgreSQL JSONB tag filtering uses the native containment operator and no longer returns HTTP 500.
-- Runtime feature disabling returns a structured HTTP 503 response with a request ID.
-- Existing catalog, asset, freshness, facet, change-feed, ETag, and CORS behavior is preserved.
+- Settings
+- Operations list
+- Operation detail and live logs
+- GitHub import
+- GitLab / Bitbucket import
+- Local manifest / ZIP import
+- Asset Gallery
+- Custom SQLAdmin dashboard
 
-## Security
+## Hotfix applied
 
-- Runtime credentials are encrypted with Fernet using a key derived from the existing
-  `SESSION_SECRET` and are never rendered back to forms, public APIs, operations, or logs.
-- OIDC administrator authentication and CSRF protection remain required for Settings and operation
-  changes.
-- Integration URLs retain the public-HTTPS and SSRF-boundary policy.
-- Secret-pattern scan found no committed PAT, API key, private key, certificate, or `.env` file.
+- Added one shared `reghub_layout.html` that always supplies a full-width `col-12` child inside the
+  SQLAdmin row.
+- Added bounded responsive page, table, form, code, JSON, and log-panel rules.
+- Rebuilt Settings into three tabs: Feature controls, Integrations, and Add custom API.
+- Changed feature groups and integration editors to accordions so only the selected editor expands.
+- Preserved every settings field, ON/OFF control, ALLOW/BLOCK permission, credential action,
+  fallback option, and custom API action.
+- Added visible import submit state and duplicate-submit prevention.
+- Added `/admin/operations/{id}/logs.json` for authenticated incremental log retrieval.
+- Added automatic SSE-to-polling fallback, connection state, manual refresh, waiting state, robust
+  copy behavior, and bounded result JSON on operation details.
+- Normalized Asset Gallery and dashboard layout without removing their functions.
+
+## Operations reliability findings
+
+The persistent operation runner and database logs were present in v0.2.2. The primary blank-page
+symptom was layout collapse. A second resilience gap existed: the browser depended only on SSE for
+new logs. Reverse proxies or browsers that interrupted the stream had no alternate transport. The
+hotfix keeps SSE as the primary transport and automatically switches to JSON polling every 1.5
+seconds after repeated stream errors.
+
+Server-rendered logs remain visible before JavaScript connects, so a live transport problem no
+longer produces a blank log page.
+
+## Database and deployment impact
+
+- New migration: **none**
+- Current Alembic head remains `20260721_0004_operations_runtime_settings`
+- Existing runtime settings and encrypted credentials remain unchanged
+- Coolify environment changes: **none required**
+- Keycloak changes: **none required**
 
 ## Automated verification
 
-- Automated tests: **78 passed**
+- Automated tests: **80 passed**
 - Application statement coverage: **68%**
 - Ruff lint: **PASS**
 - Ruff formatting: **PASS**
 - Python compilation: **PASS**
-- SQLAlchemy PostgreSQL DDL compilation: **PASS** (13 tables)
-- Alembic PostgreSQL offline upgrade through v0.2.2: **PASS**
-- PostgreSQL JSONB tag SQL compilation: **PASS**
-- Full FastAPI lifespan/API smoke test: **PASS**
-- SQLAdmin Operations/Settings/action regression tests: **PASS**
-- Runtime credential encryption/removal/reload tests: **PASS**
-- Operation lifecycle/recovery/retry tests: **PASS**
+- Jinja compilation for all custom administrator templates: **PASS**
+- Operations JSON log route: **PASS**
+- Server-rendered initial logs: **PASS**
+- SSE polling fallback markup/regression tests: **PASS**
+- PostgreSQL Alembic offline SQL through existing head: **PASS**
 - Wheel and source distribution build: **PASS**
-- Dependency integrity (`pip check`): **PASS**
-- Re-extracted release test suite: **PASS**
+- Dependency integrity: **PASS**
+- Baseline files removed: **0**
 
-One non-blocking Starlette TestClient deprecation warning is emitted by the test dependency. It does
-not represent a production runtime failure.
+One non-blocking Starlette TestClient deprecation warning remains in the test dependency and is not a
+production runtime error.
 
-## Deployment-time verification still required
+## Live verification required
 
-- Real Coolify image build/start and live PostgreSQL migration
-- Keycloak login/logout after deployment
-- Browser SSE behavior through the production reverse proxy
-- Live GitHub/GitLab/Bitbucket calls using production credentials
-- Optional screenshot and AI service behavior when enabled
+After Coolify redeploy, verify Settings at desktop and mobile width, start one GitHub import, and
+confirm the operation page shows either `Live stream` or `Polling fallback` while logs and progress
+continue to update.
