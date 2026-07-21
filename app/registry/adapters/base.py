@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 
@@ -20,6 +21,15 @@ class ImportedRepository:
     root_files: frozenset[str]
     package_json: dict[str, Any] | None
     metadata: dict[str, Any]
+    source_revision: str | None = None
+    source_updated_at: datetime | None = None
+    readme_text: str | None = None
+    requirements_text: str | None = None
+    pyproject_text: str | None = None
+    dockerfile_text: str | None = None
+    env_example_text: str | None = None
+    license_text: str | None = None
+    screenshot_urls: list[str] = field(default_factory=list)
 
 
 class RegistryAdapter(ABC):

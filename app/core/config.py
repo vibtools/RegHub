@@ -40,6 +40,24 @@ class Settings(BaseSettings):
     github_timeout_seconds: int = Field(default=15, ge=3, le=60)
     github_allow_private_repositories: bool = False
 
+    gitlab_token: SecretStr | None = None
+    bitbucket_username: str | None = None
+    bitbucket_app_password: SecretStr | None = None
+    provider_timeout_seconds: int = Field(default=20, ge=3, le=90)
+
+    ai_metadata_enabled: bool = False
+    ai_base_url: AnyHttpUrl | None = None
+    ai_api_key: SecretStr | None = None
+    ai_model: str = "gpt-4.1-mini"
+
+    screenshot_service_url: AnyHttpUrl | None = None
+    screenshot_service_token: SecretStr | None = None
+
+    local_upload_enabled: bool = False
+    local_upload_max_bytes: int = Field(default=25_000_000, ge=1024, le=100_000_000)
+    local_upload_max_uncompressed_bytes: int = Field(default=100_000_000, ge=1024, le=500_000_000)
+    local_upload_max_entries: int = Field(default=2000, ge=1, le=10000)
+
     public_api_cache_seconds: int = Field(default=60, ge=0, le=3600)
     log_level: str = "INFO"
 
@@ -49,6 +67,13 @@ class Settings(BaseSettings):
         "oidc_client_secret",
         "oidc_end_session_url",
         "github_token",
+        "gitlab_token",
+        "bitbucket_username",
+        "bitbucket_app_password",
+        "ai_base_url",
+        "ai_api_key",
+        "screenshot_service_url",
+        "screenshot_service_token",
         mode="before",
     )
     @classmethod
@@ -73,7 +98,9 @@ class Settings(BaseSettings):
                 raise ValueError("SESSION_COOKIE_SECURE must be true in production")
             required = [self.oidc_issuer_url, self.oidc_client_id, self.oidc_client_secret]
             if not all(required):
-                raise ValueError("OIDC issuer, client ID, and client secret are required in production")
+                raise ValueError(
+                    "OIDC issuer, client ID, and client secret are required in production"
+                )
             if not self.oidc_admin_values:
                 raise ValueError("OIDC_ADMIN_VALUES cannot be empty in production")
         return self

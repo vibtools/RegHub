@@ -65,4 +65,13 @@ class GitHubRegistryAdapter(RegistryAdapter):
             root_files=data.root_files,
             package_json=data.package_json,
             metadata=data.raw,
+            source_revision=data.source_revision,
+            source_updated_at=data.source_updated_at,
+            readme_text=data.readme_text,
+            requirements_text=data.requirements_text,
+            pyproject_text=data.pyproject_text,
+            dockerfile_text=data.dockerfile_text,
+            env_example_text=data.env_example_text,
+            license_text=data.license_text,
+            screenshot_urls=data.screenshot_urls,
         )

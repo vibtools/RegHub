@@ -7,8 +7,13 @@ from app.admin.views import (
     FrameworkAdmin,
     GitHubImportView,
     ImportHistoryAdmin,
+    LocalImportView,
     ProviderAdmin,
+    RegistryImportView,
+    SyncHistoryAdmin,
     TemplateAdmin,
+    TemplateAssetAdmin,
+    TemplateVersionAdmin,
 )
 from app.database.engine import engine
 
@@ -24,11 +29,16 @@ def setup_admin(app: FastAPI) -> RegistryAdmin:
     )
     for view in [
         GitHubImportView,
+        RegistryImportView,
+        LocalImportView,
         TemplateAdmin,
         CategoryAdmin,
         ProviderAdmin,
         FrameworkAdmin,
         ImportHistoryAdmin,
+        SyncHistoryAdmin,
+        TemplateVersionAdmin,
+        TemplateAssetAdmin,
     ]:
         admin.add_view(view)
     return admin

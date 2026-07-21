@@ -8,7 +8,16 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.core.config import get_settings
 from app.database.base import Base
-from app.models import Category, Framework, ImportHistory, Provider, Template  # noqa: F401
+from app.models import (  # noqa: F401
+    Category,
+    Framework,
+    ImportHistory,
+    Provider,
+    SyncHistory,
+    Template,
+    TemplateAsset,
+    TemplateVersion,
+)
 
 config = context.config
 if config.config_file_name is not None:

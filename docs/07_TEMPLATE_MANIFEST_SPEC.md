@@ -1,7 +1,46 @@
-# Template Manifest 1.0
+# Template Manifest Specification
+
+RegHub accepts Manifest v1 and v2. The manifest is descriptive only. YGIT interprets it; RegHub
+never executes build or deployment commands.
+
+## Manifest 1.0 — preserved
 
 ```json
-{"schema_version":"1.0","framework":"astro","repository":"https://github.com/o/r","branch":"main","deploy":{"type":"static"}}
+{
+  "schema_version": "1.0",
+  "framework": "astro",
+  "repository": "https://github.com/owner/repository",
+  "branch": "main",
+  "deploy": {"type": "static"}
+}
 ```
 
-The manifest is descriptive only. YGIT interprets it. RegHub never executes build or deploy commands.
+## Manifest 2.0 — Smart Registry
+
+```json
+{
+  "schema_version": "2.0",
+  "name": "Astro Starter",
+  "framework": "astro",
+  "framework_version": "5.2.1",
+  "language": "TypeScript",
+  "package_manager": "pnpm",
+  "repository": "https://github.com/owner/repository",
+  "branch": "main",
+  "build": {
+    "command": "pnpm build",
+    "start_command": "pnpm preview"
+  },
+  "deploy": {"type": "static"},
+  "environment": [
+    {
+      "key": "PUBLIC_API_URL",
+      "required": false,
+      "secret": false
+    }
+  ]
+}
+```
+
+Supported repository hosts are GitHub, GitLab, and Bitbucket over HTTPS. Local import references are
+accepted for Draft records but must be replaced by a deployable HTTPS repository before publication.

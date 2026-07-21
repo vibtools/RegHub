@@ -1,57 +1,40 @@
 # RegHub
 
-Current release: **v0.1.1**
+Current release: **v0.2.0 Smart Registry**
 
-RegHub is the registry service for the YGIT ecosystem. It manages template metadata and
-publishes a stable read-only API for `ygit.net`. It does **not** build or deploy projects.
+RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template
+metadata, manages publication, and serves a stable read-only API to `ygit.net`. RegHub does
+**not** build or deploy user projects.
 
 ## Fixed service boundaries
 
-- Identity: `auth.vib.tools`
+- Identity: `auth.vib.tools` / Keycloak
 - Registry: `reghub.ygit.dev`
 - Deployment: `ygit.net`
-- Repository metadata: GitHub API
+- Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
 
-## MVP features
+## v0.2 features
 
-- OIDC administrator login through `auth.vib.tools`
-- SQLAdmin internal registry panel
-- GitHub API metadata import without repository cloning
-- Optional server-side fine-grained GitHub PAT with clear authenticated status
-- Astro auto-detection from topics, Astro config files, and root `package.json`
-- Templates, categories, providers, and frameworks
-- Draft, published, and disabled lifecycle
-- Versioned public read-only API
-- Minimal, validated deployment manifest served to YGIT
-- PostgreSQL/Alembic, Docker, tests, health checks
+- OIDC-protected SQLAdmin panel
+- GitHub, GitLab, and Bitbucket metadata import without repository cloning
+- Local manifest and bounded ZIP inspection, disabled by default
+- Auto framework/version, language, package-manager, build command, and environment detection
+- Auto title, description, tags, category, difficulty, and use-case metadata
+- Optional OpenAI-compatible metadata enrichment
+- Repository screenshot discovery and optional isolated screenshot-service generation
+- Transparent quality score and breakdown
+- Draft, Published, and Disabled lifecycle
+- Source synchronization with version and sync history
+- Backward-compatible Manifest v1 and enhanced Manifest v2
+- Public read-only API for YGIT
 
-## Local setup
+## Security model
 
-```bash
-cp .env.local.example .env
-# Set SESSION_SECRET to a random value of at least 32 characters.
-docker compose -f compose.local.yml up --build
-```
-
-Open:
-
-- API documentation: `http://localhost:8000/docs`
-- Admin panel: `http://localhost:8000/admin`
-- Health: `http://localhost:8000/api/v1/health`
-
-When OIDC is not configured, `/admin` remains locked. Configure the client in
-`auth.vib.tools` with callback URL:
-
-```text
-https://reghub.ygit.dev/auth/callback
-```
-
-## Coolify
-
-Deploy this repository as a Dockerfile application. Configure the domain
-`reghub.ygit.dev`, attach PostgreSQL, and copy the production variables described in
-`docs/09_COOLIFY_DEPLOYMENT.md` into Coolify Secrets.
+RegHub only reads bounded text metadata through provider APIs or inspects ZIP entries in memory.
+It does not clone repositories, install packages, run builds, start templates, or execute uploaded
+code. ZIP traversal, symlinks, encryption, entry count, compressed size, and uncompressed size are
+validated. Local ZIP templates remain drafts until they have a deployable HTTPS repository.
 
 ## Public API
 
@@ -62,15 +45,27 @@ GET /api/v1/templates/{slug}/manifest
 GET /api/v1/categories
 GET /api/v1/providers
 GET /api/v1/frameworks
+GET /api/v1/capabilities
+GET /api/v1/health
+GET /api/v1/ready
 ```
 
-Only published templates are exposed. YGIT owns all deployment behavior.
+Only Published templates are exposed.
 
-## v0.1.1 production patch
+## Local setup
 
-- Fixes the SQLAdmin Templates list crash caused by SQLAdmin 0.29 filter API changes.
-- Preserves Status, Featured, and Framework filters using supported filter objects.
-- Improves GitHub token errors and shows authenticated/unauthenticated API mode.
-- Reads a bounded root `package.json` through GitHub's API for framework detection.
-- Adds Astro detection regression coverage without cloning or executing repositories.
-- Requires no database migration and does not change existing public API paths.
+```bash
+cp .env.local.example .env
+docker compose -f compose.local.yml up --build
+```
+
+## Coolify upgrade
+
+1. Take a PostgreSQL backup.
+2. Replace the project files, preserving `.git` and any local `.env`.
+3. Commit and push to `main`.
+4. Redeploy in Coolify.
+5. The entrypoint runs `alembic upgrade head` and `python -m scripts.seed` automatically.
+6. Verify `/api/v1/health`, `/api/v1/ready`, `/api/v1/capabilities`, admin imports, and sync.
+
+See `docs/13_V0.2.0_UPGRADE.md` and `docs/14_V0.2.0_ENVIRONMENT.md`.

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Query, Request, Response
+
 from app.api.dependencies import DatabaseSession
 from app.core.config import get_settings
 from app.registry.category import CategoryService
@@ -6,6 +7,7 @@ from app.registry.framework import FrameworkService
 from app.registry.provider import ProviderService
 from app.registry.template import TemplateService
 from app.schemas.catalog import (
+    CapabilitiesRead,
     CategoryRead,
     FrameworkRead,
     PaginationMeta,
@@ -87,3 +89,31 @@ async def providers(response: Response, session: DatabaseSession):
 async def frameworks(response: Response, session: DatabaseSession):
     _cache(response)
     return await FrameworkService.list_active(session)
+
+
+@router.get("/capabilities", response_model=CapabilitiesRead)
+async def capabilities(request: Request, response: Response):
+    _cache(response)
+    container = request.app.state.container
+    return CapabilitiesRead(
+        version="0.2.0",
+        registry_adapters=[*container.adapter_names, "local-manifest", "local-zip"],
+        framework_detection=[
+            "astro",
+            "nextjs",
+            "react-vite",
+            "react",
+            "vue",
+            "nuxt",
+            "sveltekit",
+            "laravel",
+            "django",
+            "fastapi",
+            "static-html",
+            "docker",
+        ],
+        manifest_versions=["1.0", "2.0"],
+        local_upload_enabled=container.local_upload_enabled,
+        ai_metadata_enabled=container.ai_metadata_enabled,
+        screenshot_service_enabled=container.screenshot_service_enabled,
+    )

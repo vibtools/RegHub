@@ -25,13 +25,14 @@ configure_logging(settings.log_level)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
+    await app.state.container.close()
     await engine.dispose()
 
 
 app = FastAPI(
     title="RegHub API",
-    version="0.1.1",
-    description="Read-only template registry API for YGIT",
+    version="0.2.0",
+    description="Smart template registry API for YGIT",
     debug=settings.app_debug,
     lifespan=lifespan,
     docs_url="/docs" if settings.app_env != "production" else None,

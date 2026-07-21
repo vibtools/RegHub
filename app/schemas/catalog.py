@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -37,11 +38,19 @@ class TemplateListItem(BaseModel):
     slug: str
     short_description: str | None
     repository_url: str
+    repository_adapter: str
     default_branch: str
+    preview_url: str | None
     thumbnail_url: str | None
+    screenshots: list[str]
     license_spdx: str | None
     primary_language: str | None
+    framework_version: str | None
+    package_manager: str | None
+    difficulty: str | None
+    use_case: str | None
     topics: list[str]
+    quality_score: int
     stars_count: int
     forks_count: int
     is_featured: bool
@@ -55,6 +64,8 @@ class TemplateListItem(BaseModel):
 class TemplateDetail(TemplateListItem):
     description: str | None
     homepage_url: str | None
+    quality_breakdown: dict[str, int]
+    analysis: dict[str, Any]
     manifest: TemplateManifest
 
 
@@ -74,3 +85,13 @@ class TemplatePage(BaseModel):
     data: list[TemplateListItem]
     pagination: PaginationMeta
     meta: ResponseMeta
+
+
+class CapabilitiesRead(BaseModel):
+    version: str
+    registry_adapters: list[str]
+    framework_detection: list[str]
+    manifest_versions: list[str]
+    local_upload_enabled: bool
+    ai_metadata_enabled: bool
+    screenshot_service_enabled: bool

@@ -6,6 +6,10 @@ class AdapterRegistry:
     def __init__(self, adapters: list[RegistryAdapter]) -> None:
         self._adapters = {adapter.name: adapter for adapter in adapters}
 
+    @property
+    def names(self) -> list[str]:
+        return sorted(self._adapters)
+
     def get(self, name: str) -> RegistryAdapter:
         try:
             return self._adapters[name]
