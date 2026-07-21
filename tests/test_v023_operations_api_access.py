@@ -304,7 +304,7 @@ def test_v023_ui_exposes_productive_controls() -> None:
     assert 'name="status"' in operations
     assert 'name="type"' in operations
     assert "No change was required" in detail
-    assert "Debug logs" in detail
+    assert "Operation logs" in detail
     assert "terminal" in detail.casefold()
 
     assert "Search templates" in gallery

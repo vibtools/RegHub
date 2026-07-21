@@ -119,6 +119,15 @@ API_ENDPOINTS: tuple[ApiEndpointDefinition, ...] = (
         requires_template=True,
     ),
     ApiEndpointDefinition(
+        key="template_repository",
+        name="Original repository",
+        method="GET",
+        path_template="/api/v1/templates/{slug}/repository",
+        scope="catalog",
+        description="Canonical source repository URL and source identity for a published template.",
+        requires_template=True,
+    ),
+    ApiEndpointDefinition(
         key="template_assets",
         name="Template assets",
         method="GET",

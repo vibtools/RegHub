@@ -4,13 +4,7 @@
   <div class="card">
     <div class="card-header"><h3 class="card-title">GitHub metadata import</h3></div>
     <div class="card-body">
-      <div class="alert alert-info">After submission, RegHub opens the Operations Console with live progress, debug logs, copy and export controls.</div>
       {% if not feature_flag_enabled %}<div class="alert alert-danger">GitHub Import is OFF or its administrator task permission is blocked in Settings.</div>{% elif not integration_enabled %}<div class="alert alert-danger">The GitHub integration is OFF in Settings.</div>{% endif %}
-      {% if github_authenticated %}
-      <div class="alert alert-success" role="status">GitHub API is authenticated with a server-side token.</div>
-      {% else %}
-      <div class="alert alert-warning" role="status">GitHub API is using unauthenticated mode. Public imports work, but rate limits are lower.</div>
-      {% endif %}
       {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
       {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
 

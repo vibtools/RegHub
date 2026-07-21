@@ -51,16 +51,20 @@
       <div class="card mt-3">
         <div class="card-header d-flex justify-content-between align-items-center">
           <div>
-            <h3 class="card-title mb-0">Debug logs</h3>
-            <div class="text-secondary small">Logs remain readable even if the live connection falls back to polling.</div>
+            <div class="d-flex align-items-center gap-2">
+              <h3 class="card-title mb-0">Operation logs</h3>
+              <span id="logCount" class="badge bg-secondary-lt">{{ operation.logs|length }}</span>
+            </div>
           </div>
           <div class="btn-list">
+            <button id="showLogStart" type="button" class="btn btn-sm btn-outline-secondary">Start</button>
+            <button id="showLogLatest" type="button" class="btn btn-sm btn-outline-secondary">Latest</button>
             <button id="copyLogs" type="button" class="btn btn-sm btn-outline-secondary">Copy logs</button>
             <a class="btn btn-sm btn-outline-secondary" href="/admin/operations/{{ operation.id }}/logs.txt">Export .txt</a>
           </div>
         </div>
         <div class="card-body">
-          <div id="logOutput" class="reghub-log-panel" role="log" aria-live="polite" aria-label="Operation debug logs">
+          <div id="logOutput" class="reghub-log-panel" role="log" aria-live="polite" aria-label="Operation logs">
             {% for item in operation.logs %}
             <div class="reghub-log-line" data-sequence="{{ item.sequence }}" data-level="{{ item.level }}"><span class="reghub-log-time">{{ item.created_at.strftime('%H:%M:%S.%f')[:-3] }}</span><span class="reghub-log-level">{{ item.level|upper }}</span><span class="reghub-log-content"><span class="reghub-log-message">{{ item.message }}</span>{% if item.data %}<code class="reghub-log-data">{{ item.data | tojson }}</code>{% endif %}</span></div>
             {% else %}
@@ -128,6 +132,9 @@
   const retryForm = document.getElementById('retryForm');
   const refreshButton = document.getElementById('refreshOperation');
   const copyButton = document.getElementById('copyLogs');
+  const showLogStart = document.getElementById('showLogStart');
+  const showLogLatest = document.getElementById('showLogLatest');
+  const logCount = document.getElementById('logCount');
   const terminal = new Set(['succeeded', 'failed', 'cancelled', 'skipped']);
 
   let lastSequence = 0;
@@ -135,6 +142,7 @@
   let pollingTimer = null;
   let consecutiveStreamErrors = 0;
   let currentStatus = {{ operation.status.value|tojson }};
+  let followTail = !terminal.has(currentStatus);
 
   output.querySelectorAll('[data-sequence]').forEach(element => {
     lastSequence = Math.max(lastSequence, Number(element.dataset.sequence || 0));
@@ -202,6 +210,7 @@
     const sequence = Number(data.sequence || 0);
     if (sequence && sequence <= lastSequence) return;
     if (sequence) lastSequence = sequence;
+    if (logCount) logCount.textContent = String(Math.max(Number(logCount.textContent || 0) + 1, lastSequence));
     const empty = document.getElementById('emptyLogMessage');
     if (empty) empty.remove();
     const line = document.createElement('div');
@@ -216,11 +225,11 @@
     if (data.data && Object.keys(data.data).length) {
       const detail = document.createElement('code');
       detail.className = 'reghub-log-data';
-      detail.textContent = JSON.stringify(data.data);
+      detail.textContent = JSON.stringify(data.data, null, 2);
       line.querySelector('.reghub-log-content').appendChild(detail);
     }
     output.appendChild(line);
-    output.scrollTop = output.scrollHeight;
+    if (followTail) output.scrollTop = output.scrollHeight;
   }
 
   async function fetchJson(url) {
@@ -338,12 +347,23 @@
     window.setTimeout(() => { copyButton.textContent = 'Copy logs'; }, 1400);
   });
 
+  output.addEventListener('scroll', () => {
+    const distance = output.scrollHeight - output.scrollTop - output.clientHeight;
+    followTail = distance < 48;
+  });
+  showLogStart.addEventListener('click', () => { followTail = false; output.scrollTop = 0; });
+  showLogLatest.addEventListener('click', () => { followTail = true; output.scrollTop = output.scrollHeight; });
   refreshButton.addEventListener('click', pollOnce);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && !terminal.has(currentStatus)) pollOnce();
   });
   window.addEventListener('beforeunload', stopLiveUpdates);
 
+  if (terminal.has(currentStatus)) {
+    output.scrollTop = 0;
+  } else {
+    output.scrollTop = output.scrollHeight;
+  }
   pollOnce();
   startEventStream();
 })();

@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.2.3.1 Settings, API Check & Terminal Hotfix**
+Current release: **v0.2.3.2 Settings AJAX & Repository Endpoint Hotfix**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -13,6 +13,18 @@ deploy user projects.
 - Deployment: `ygit.net`
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
+
+## v0.2.3.2 hotfix
+
+All v0.2.3.1 registry, API access, operation, settings, Keycloak, and database behavior is preserved.
+
+- Every Settings action is submitted asynchronously and updates the active panel without a full page reload.
+- Server-rendered active-tab state and form return targets preserve the selected Settings section if a normal reload occurs.
+- Added `GET /api/v1/templates/{slug}/repository` for the canonical original repository URL and source identity.
+- Added the repository endpoint to Settings → API Manage with per-row Check and Use controls.
+- Reworked operation-log navigation, compact row spacing, structured detail formatting, and terminal start/latest controls.
+- Removed administrator-facing development commentary from import and settings pages while retaining actionable state, success, warning, and error messages.
+- No database migration is required.
 
 ## v0.2.3.1 hotfix
 
@@ -43,7 +55,7 @@ Long-running administrator tasks use persistent states:
 queued -> running -> succeeded | skipped | failed | cancelled
 ```
 
-A running operation displays progress and debug logs. Logs remain available after completion and
+A running operation displays progress and detailed operation logs. Logs remain available after completion and
 can be copied or exported. Queued operations left before execution are recovered after startup. An operation interrupted while
 running is marked failed and can be inspected and retried.
 
@@ -85,6 +97,7 @@ Existing paths and response contracts remain compatible. Published templates are
 GET /api/v1/templates
 GET /api/v1/templates/{slug}
 GET /api/v1/templates/{slug}/manifest
+GET /api/v1/templates/{slug}/repository
 GET /api/v1/templates/{slug}/assets
 GET /api/v1/templates/{slug}/freshness
 GET /api/v1/templates/changes
@@ -106,4 +119,4 @@ GET /api/v1/ready
 5. The entrypoint runs `alembic upgrade head` and `python -m scripts.seed` automatically.
 6. Verify health, readiness, tag filtering, Operations, and Settings.
 
-See `docs/23_V0.2.3.1_HOTFIX.md` and `docs/24_V0.2.3.1_UPGRADE.md`.
+See `docs/25_V0.2.3.2_HOTFIX.md` and `docs/26_V0.2.3.2_UPGRADE.md`.

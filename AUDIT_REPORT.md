@@ -1,48 +1,69 @@
-# RegHub v0.2.3.1 Settings, API Check & Terminal Hotfix — Production Audit
+# RegHub v0.2.3.2 Settings AJAX & Repository Endpoint Hotfix — Production Audit
 
 ## Baseline and zero-freedom compatibility
 
-- Built directly from the live v0.2.3 Operations & API Access source archive.
-- No existing endpoint, OIDC route, SQLAdmin model view, feature flag, integration setting, encrypted
-  credential, service token, block rule, operation history, template record, manifest, migration,
-  Docker entrypoint, Coolify variable, or deployment boundary was removed.
+- Built directly from the live v0.2.3.1 API Settings & Logs Hotfix source archive.
+- No existing endpoint, OIDC route, SQLAdmin view, feature flag, integration, encrypted credential,
+  service token, block rule, operation history, template record, manifest, migration, Docker
+  entrypoint, Coolify variable, or deployment boundary was removed.
 - Existing database revision remains `20260721_0005`; this hotfix requires no migration.
 
 ## Forensic findings and corrections
 
-### Settings tab reset
+### Settings actions and active-section continuity
 
-HTML fragments are not submitted with form POST requests. v0.2.3 depended on the URL fragment and
-browser session storage, so after an action the server rendered the default Feature controls pane.
-v0.2.3.1 records the originating pane in a hidden `return_tab` field, validates it server-side, and
-renders the same pane after success or failure.
+The v0.2.3.1 server correctly understood `return_tab`, but most Settings actions still used normal
+form navigation. The browser therefore reloaded the full page and client tab activation could race
+against the newly rendered document. Every Settings mutation now uses one delegated asynchronous
+form controller. It submits the exact clicked action, parses the authenticated server response, and
+replaces only the Settings content shell. URL query/hash state, session storage, hidden return
+fields, and server-rendered active classes provide layered fallback so the originating section is
+preserved even when JavaScript is unavailable or a normal reload occurs.
 
-### API check routing failure
+### Canonical original repository API
 
-Inside a SQLAdmin custom view, `request.app` refers to the mounted SQLAdmin Starlette application,
-not the root FastAPI application. The v0.2.3 checker sent `/api/v1/*` requests to that sub-app, whose
-error template then failed to resolve `admin:statics`. v0.2.3.1 explicitly uses the root application
-stored on the Admin instance and returns structured per-route results.
+Added `GET /api/v1/templates/{slug}/repository`. It returns the published template's canonical source
+repository URL, provider adapter, default branch, external repository ID, and latest successful
+source revision. The route is additive, uses the existing Catalog API feature switch and `catalog`
+service-token permission, and appears in Settings → API Manage with the existing asynchronous Check
+and Use controls.
 
-### Terminal spacing and diagnostics
+### Administrator-facing UI cleanup
 
-The previous log markup placed an optional data element in an already occupied CSS grid column. The
-browser created an implicit second row, producing large blank gaps. The hotfix uses one compact row
-with a single content cell and inline structured diagnostics. Import and sync operations also record
-redacted input context, source metadata, analyzer results, change sets, media counts, transaction
-stages, elapsed time, exception stage, and bounded traceback data.
+Import and Settings pages no longer display implementation commentary, credential-mode notices, or
+instructions about internal operation mechanics. Functional availability warnings, validation
+errors, success states, and security controls remain visible. Operation pages use the production
+label “Operation logs”.
 
-## API endpoint management
+### Operation terminal readability
 
-- Dedicated endpoint registry lists every supported v1 route.
-- Each row has a no-reload **Check** action.
-- Each row has a **Use** action that copies URL, method, scope, Bearer header, PowerShell example, and
-  curl example.
-- Dynamic template routes use a published template when available and are marked unavailable rather
-  than falsely failed when no published template exists.
-- Internal checks use short-lived in-memory tokens and never expose stored service-token secrets.
+Completed operations open at their first log entry and running operations continue following the
+latest entry. Start/Latest controls, log counts, formatted structured context, richer sync stages,
+and compact forced row sizing provide a denser terminal view without removing persisted diagnostics.
 
 ## Automated verification
 
-Final evidence is recorded in `RELEASE_VERIFICATION_V0.2.3.1.txt`. Browser behavior through the live
-Coolify reverse proxy must still be verified after deployment.
+- Automated tests: **91 passed**
+- Application statement coverage: **71%**
+- Ruff lint: **PASS**
+- Ruff formatting: **PASS**
+- Python compilation: **PASS**
+- Jinja template compilation: **PASS** (10 templates)
+- Settings JavaScript syntax (`node --check`): **PASS**
+- PostgreSQL table DDL compilation: **PASS** (16 tables)
+- Alembic PostgreSQL offline upgrade through head: **PASS**
+- Package wheel build: **PASS**
+- Re-extracted release test suite: **PASS** (91 passed)
+- Dependency integrity (`pip check`): **PASS**
+- Baseline files removed: **0**
+- New database migration: **none**
+
+One non-blocking Starlette TestClient deprecation warning is emitted by the test dependency. It does
+not represent a production runtime failure.
+
+## Deployment-time verification still required
+
+- Browser AJAX behavior through the live Coolify reverse proxy
+- Settings fallback behavior with JavaScript disabled
+- Keycloak administrator session continuity after redeployment
+- Live service-token checks for the new repository endpoint

@@ -1,0 +1,24 @@
+RegHub v0.2.3.2 Release Verification
+Baseline: v0.2.3.1
+
+Automated tests:                         91 passed
+Application statement coverage:          71%
+Ruff lint:                               PASS
+Ruff formatting:                         PASS
+Python compilation:                      PASS
+Jinja template compilation:              PASS (10 templates)
+Settings JavaScript syntax:              PASS
+PostgreSQL DDL compilation:              PASS (16 tables)
+Alembic offline upgrade through head:     PASS
+Package wheel build:                     PASS
+Re-extracted release test suite:          PASS (91 passed)
+Dependency integrity:                    PASS
+Settings AJAX mutation coverage:          PASS
+Settings active-tab fallback coverage:    PASS
+Repository endpoint coverage:             PASS
+API Manage endpoint registry coverage:    PASS
+Operation log compact-layout assertions:  PASS
+Baseline files removed:                   0
+Database migration:                       none
+
+Live Coolify, Keycloak, browser proxy, and production credential checks remain deployment-time tests.

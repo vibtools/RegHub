@@ -141,24 +141,29 @@
   }
 
   .reghub-log-line {
-    display: grid;
-    grid-template-columns: 88px 58px minmax(0, 1fr);
-    column-gap: .45rem;
-    align-items: baseline;
-    margin: 0;
-    padding: .2rem .15rem;
-    min-height: 0;
+    display: grid !important;
+    grid-template-columns: 82px 54px minmax(0, 1fr);
+    column-gap: .4rem;
+    align-items: start;
+    margin: 0 !important;
+    padding: .12rem .1rem !important;
+    min-height: 0 !important;
+    height: auto !important;
+    line-height: 1.2 !important;
     border-bottom: 1px solid rgba(255,255,255,.045);
   }
 
   .reghub-log-line:last-child { border-bottom: 0; }
+  .reghub-log-line > * { margin: 0 !important; padding: 0 !important; line-height: 1.2 !important; }
   .reghub-log-time { color: #8190b7; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .reghub-log-level { color: #8fd3ff; font-weight: 700; white-space: nowrap; }
-  .reghub-log-content { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: .25rem .55rem; }
+  .reghub-log-content { min-width: 0; display: block; }
   .reghub-log-message { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
   .reghub-log-data {
     min-width: 0;
     max-width: 100%;
+    display: block;
+    margin-top: .08rem !important;
     padding: 0;
     border: 0;
     background: transparent;

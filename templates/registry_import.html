@@ -4,9 +4,6 @@
   <div class="card">
     <div class="card-header"><h3 class="card-title">GitLab / Bitbucket metadata import</h3></div>
     <div class="card-body">
-      <div class="alert alert-info">After submission, RegHub opens the Operations Console with live progress and downloadable logs.</div>
-      {% if gitlab_authenticated %}<div class="alert alert-success">GitLab token configured.</div>{% endif %}
-      {% if bitbucket_authenticated %}<div class="alert alert-success">Bitbucket credentials configured.</div>{% endif %}
       {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
       {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
       <form method="post" autocomplete="off" data-reghub-operation-form>

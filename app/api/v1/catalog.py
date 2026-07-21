@@ -19,6 +19,8 @@ from app.schemas.catalog import (
     FreshnessResponse,
     PaginationMeta,
     ProviderRead,
+    RepositoryRead,
+    RepositoryResponse,
     ResponseMeta,
     TemplateDetail,
     TemplatePage,
@@ -167,6 +169,22 @@ async def template_manifest(
     return template.manifest
 
 
+@router.get("/templates/{slug}/repository", response_model=RepositoryResponse)
+async def template_repository(
+    slug: str, request: Request, response: Response, session: DatabaseSession
+):
+    await _require_api(request, "api_catalog", "catalog")
+    template = await TemplateService.get_public_by_slug(session, slug)
+    repository = await TemplateService.public_repository(session, slug)
+    _cache(response)
+    if _entity_headers(request, response, f"repository:{template.id}", template.updated_at):
+        return Response(status_code=304, headers=dict(response.headers))
+    return RepositoryResponse(
+        data=RepositoryRead(**repository),
+        meta=ResponseMeta(request_id=request.state.request_id),
+    )
+
+
 @router.get("/templates/{slug}/assets", response_model=AssetListResponse)
 async def template_assets(
     slug: str, request: Request, response: Response, session: DatabaseSession
@@ -231,7 +249,7 @@ async def capabilities(request: Request, response: Response):
     await _require_api(request, "api_catalog", "capabilities")
     _cache(response)
     return CapabilitiesRead(
-        version="0.2.3.1",
+        version="0.2.3.2",
         registry_adapters=[*container.adapter_names, "local-manifest", "local-zip"],
         framework_detection=[
             "astro",

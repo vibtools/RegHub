@@ -128,6 +128,16 @@ class FreshnessRead(BaseModel):
     is_stale: bool
 
 
+class RepositoryRead(BaseModel):
+    template_id: UUID
+    slug: str
+    repository_url: str
+    repository_adapter: str
+    default_branch: str
+    external_repository_id: str | None
+    source_revision: str | None
+
+
 class FacetItem(BaseModel):
     name: str
     slug: str
@@ -149,6 +159,11 @@ class AssetListResponse(BaseModel):
 
 class FreshnessResponse(BaseModel):
     data: FreshnessRead
+    meta: ResponseMeta
+
+
+class RepositoryResponse(BaseModel):
+    data: RepositoryRead
     meta: ResponseMeta
 
 

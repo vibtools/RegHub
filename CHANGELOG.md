@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.2.3.2 - 2026-07-21
+
+### Settings continuity and source endpoint hotfix
+
+- Converted every Settings mutation to asynchronous in-page submission with immediate DOM refresh and no full-page navigation.
+- Added server-rendered tab activation, explicit return targets, URL hash/query persistence, and a non-JavaScript fallback that remains on the originating section.
+- Added `GET /api/v1/templates/{slug}/repository` for canonical repository URL, adapter, branch, external ID, and latest source revision.
+- Registered the repository endpoint in Settings → API Manage for single-route checks and copy-ready usage instructions.
+- Added operation-log Start/Latest navigation, structured JSON formatting, terminal log counts, compact forced row sizing, and richer sync diagnostics.
+- Removed development-oriented helper banners from import and settings pages while preserving operational errors and disabled-state warnings.
+- Added no database migration and removed no existing route, feature, setting, token, record, or deployment behavior.
+
 ## 0.2.3.1 - 2026-07-21
 
 ### Settings and API verification hotfix

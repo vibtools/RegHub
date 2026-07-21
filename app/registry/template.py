@@ -630,6 +630,35 @@ class TemplateSyncService:
                 ),
                 "debug",
             )
+            await self._progress(
+                progress,
+                34,
+                "source_root_entries="
+                + json.dumps(
+                    sorted(imported.root_files)[:60],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                "debug",
+            )
+            await self._progress(
+                progress,
+                35,
+                "source_topics="
+                + json.dumps(imported.topics[:40], ensure_ascii=False, separators=(",", ":")),
+                "debug",
+            )
+            await self._progress(
+                progress,
+                36,
+                "source_media="
+                + json.dumps(
+                    imported.screenshot_urls[:20],
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                "debug",
+            )
             await self._progress(progress, 38, "Analyzing latest repository metadata")
             analysis = self._analyzer.analyze(imported)
             await self._progress(progress, 48, f"Framework detected: {analysis.framework_name}")
@@ -646,6 +675,26 @@ class TemplateSyncService:
                         "quality_score": analysis.quality_score,
                         "screenshot_count": len(analysis.screenshots),
                         "tag_count": len(analysis.tags),
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+                "debug",
+            )
+            await self._progress(
+                progress,
+                51,
+                "analysis_evidence="
+                + json.dumps(
+                    {
+                        "framework_evidence": analysis.evidence.get("framework_evidence", []),
+                        "root_files": analysis.evidence.get("root_files", []),
+                        "build_command": analysis.build_command,
+                        "start_command": analysis.start_command,
+                        "deploy_type": analysis.deploy_type,
+                        "security_signals": analysis.security_signals,
+                        "tags": analysis.tags[:40],
+                        "screenshots": analysis.screenshots[:20],
                     },
                     ensure_ascii=False,
                     separators=(",", ":"),
@@ -739,6 +788,24 @@ class TemplateSyncService:
                     template.provider = await ProviderService.resolve_for_repository(
                         session, imported
                     )
+                await self._progress(
+                    progress,
+                    78,
+                    "resolved_registry_links="
+                    + json.dumps(
+                        {
+                            "framework_id": str(framework.id),
+                            "framework_slug": framework.slug,
+                            "provider_id": str(template.provider.id) if template.provider else None,
+                            "provider_slug": template.provider.slug if template.provider else None,
+                            "category_id": str(template.category_id)
+                            if template.category_id
+                            else None,
+                        },
+                        separators=(",", ":"),
+                    ),
+                    "debug",
+                )
                 template.manifest = build_manifest(
                     framework_slug=framework.slug,
                     repository_url=imported.repository_url,
@@ -747,6 +814,17 @@ class TemplateSyncService:
                     analysis=analysis,
                     schema_version="2.0",
                 ).as_dict()
+                await self._progress(
+                    progress,
+                    82,
+                    "manifest_v2="
+                    + json.dumps(
+                        template.manifest,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                    "debug",
+                )
                 now = datetime.now(UTC)
                 template.last_synced_at = now
                 template.last_analysis_at = now
@@ -1003,6 +1081,28 @@ class TemplateService:
                 )
             ).all()
         )
+
+    @classmethod
+    async def public_repository(cls, session: AsyncSession, slug: str) -> dict[str, object]:
+        template = await cls.get_public_by_slug(session, slug)
+        latest_sync = await session.scalar(
+            select(SyncHistory)
+            .where(
+                SyncHistory.template_id == template.id,
+                SyncHistory.status == ImportStatus.SUCCEEDED,
+            )
+            .order_by(SyncHistory.completed_at.desc())
+            .limit(1)
+        )
+        return {
+            "template_id": template.id,
+            "slug": template.slug,
+            "repository_url": template.repository_url,
+            "repository_adapter": template.repository_adapter,
+            "default_branch": template.default_branch,
+            "external_repository_id": template.external_repository_id,
+            "source_revision": latest_sync.source_revision if latest_sync else None,
+        }
 
     @classmethod
     async def public_freshness(cls, session: AsyncSession, slug: str) -> dict[str, object]:
