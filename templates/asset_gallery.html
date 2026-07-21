@@ -1,7 +1,7 @@
 {% extends "sqladmin/layout.html" %}
 {% block content %}
 <div class="container-xl">
-  <div class="page-header d-print-none"><h2 class="page-title">Template Asset Gallery</h2></div>
+  <div class="page-header d-print-none"><h2 class="page-title">Template Asset Gallery</h2></div>{% if not feature_enabled %}<div class="alert alert-warning">Asset Gallery changes are OFF in RegHub Settings. Existing assets remain visible.</div>{% endif %}
   {% if success %}<div class="alert alert-success">{{ success }}</div>{% endif %}
   {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
   <div class="card mb-3"><div class="card-body">
@@ -29,7 +29,7 @@
         <div class="col-md-6"><input class="form-control" type="url" name="url" placeholder="https://cdn.example.com/screenshot.webp" required></div>
         <div class="col-md-3"><select class="form-select" name="kind"><option value="screenshot">Screenshot</option><option value="thumbnail">Thumbnail</option><option value="preview">Preview</option><option value="image">Image</option></select></div>
         <div class="col-md-2"><input class="form-control" type="number" name="sort_order" min="0" max="10000" value="0"></div>
-        <div class="col-md-1"><button class="btn btn-success w-100" type="submit">Add</button></div>
+        <div class="col-md-1"><button class="btn btn-success w-100" type="submit" {% if not feature_enabled %}disabled{% endif %}>Add</button></div>
       </div>
     </form>
   </div></div>
@@ -47,7 +47,7 @@
           <div class="col-12"><input class="form-control form-control-sm" type="url" name="url" value="{{ asset.url }}" required></div>
           <div class="col-7"><select class="form-select form-select-sm" name="kind">{% for kind in ['screenshot','thumbnail','preview','image'] %}<option value="{{ kind }}" {% if asset.kind == kind %}selected{% endif %}>{{ kind }}</option>{% endfor %}</select></div>
           <div class="col-3"><input class="form-control form-control-sm" type="number" name="sort_order" min="0" max="10000" value="{{ asset.sort_order }}"></div>
-          <div class="col-2"><button class="btn btn-primary btn-sm w-100" type="submit">Save</button></div>
+          <div class="col-2"><button class="btn btn-primary btn-sm w-100" type="submit" {% if not feature_enabled %}disabled{% endif %}>Save</button></div>
         </form>
       </div>
       <div class="card-footer">
@@ -56,7 +56,7 @@
           <input type="hidden" name="action" value="delete">
           <input type="hidden" name="template_id" value="{{ selected.id }}">
           <input type="hidden" name="asset_id" value="{{ asset.id }}">
-          <button class="btn btn-outline-danger btn-sm" type="submit">Delete</button>
+          <button class="btn btn-outline-danger btn-sm" type="submit" {% if not feature_enabled %}disabled{% endif %}>Delete</button>
         </form>
       </div>
     </div></div>

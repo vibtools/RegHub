@@ -1,57 +1,78 @@
-# RegHub v0.2.1 Production Readiness Audit
+# RegHub v0.2.2 Production Readiness Audit
 
 ## Baseline and zero-freedom compatibility
 
-- Built from the running v0.2.0 Smart Registry release.
-- No existing endpoint, OIDC route, SQLAdmin section, status, model field, migration, manifest version,
-  Docker entrypoint, or registry/deployment boundary was removed.
-- Existing templates, IDs, slugs, publication states, curated metadata, manual assets, and API paths are
-  preserved.
-- Migration `20260721_0003` is additive.
+- Built from the running v0.2.1 replace-ready source.
+- No existing public endpoint, OIDC route, SQLAdmin model page, template field, publication status,
+  manifest behavior, provider/media capability, migration, Docker entrypoint, or deployment boundary
+  was removed.
+- Existing template IDs, slugs, database records, Keycloak settings, Coolify variables, and public
+  API paths remain compatible.
+- Migration `20260721_0004_operations_runtime_settings` is additive and creates only runtime feature,
+  integration, operation, and operation-log tables.
 
-## Implemented fixes
+## Operations and administrator UX
 
-- Owner-derived Provider auto-create/update for GitHub, GitLab, and Bitbucket.
-- Initial-import Sync History rows plus backfill for historical templates without sync records.
-- Manual sync requester, trigger, status, revision, metadata, error, and changed-field persistence.
-- Recursive media scan, README image extraction, deduplication, bounded traversal, and source-safe URLs.
-- Manual Asset Gallery and preservation of manual/generated assets during sync.
-- Screenshot jobs with status, attempts, retry action, result, error, metadata, and public-HTTPS safety validation.
-- Public asset, freshness, change-feed, facets, filter, sorting, ETag, and Last-Modified support.
+- Repository imports, local imports, source synchronization, publication changes, thumbnail
+  generation, and screenshot retries run as persistent administrator operations.
+- Every operation records ordered logs, progress, status, requester, result, failure message,
+  timestamps, retry ancestry, and its originating administrator URL.
+- The operation detail page provides SSE live updates, progress, debug logs, copy/export, cancel,
+  retry, and context-preserving return navigation.
+- Interrupted running operations are marked failed after restart; queued operations are recovered.
 
-## Security controls
+## Runtime Settings
 
-- Repository clone/install/build/execution remains prohibited.
-- Provider metadata and recursive tree reads are bounded.
-- Screenshot preview/result URLs require HTTPS and reject credentials, nonstandard ports, blocked
-  hostnames, and literal private/loopback/link-local/reserved/multicast addresses. The isolated screenshot
-  service must separately enforce DNS-resolution and outbound-network restrictions.
-- Provider credentials and screenshot tokens are never stored in registry records.
-- Imports remain Draft-only; publication remains an explicit administrator action.
+- Feature availability and administrator task permission are independently controlled at runtime.
+- GitHub, GitLab, Bitbucket, AI metadata, and screenshot integrations can be enabled, disabled, or
+  reconfigured without a Coolify redeploy.
+- Existing Coolify environment credentials remain optional bootstrap/fallback values.
+- Custom third-party API records can be securely added and removed. A custom integration is secure
+  runtime configuration storage; provider-specific code must explicitly consume it before it can
+  perform a new external workflow.
+- Health, readiness, authentication, and Settings remain available as recovery surfaces and cannot
+  be disabled from the public API switches.
+
+## API corrections
+
+- PostgreSQL JSONB tag filtering uses the native containment operator and no longer returns HTTP 500.
+- Runtime feature disabling returns a structured HTTP 503 response with a request ID.
+- Existing catalog, asset, freshness, facet, change-feed, ETag, and CORS behavior is preserved.
+
+## Security
+
+- Runtime credentials are encrypted with Fernet using a key derived from the existing
+  `SESSION_SECRET` and are never rendered back to forms, public APIs, operations, or logs.
+- OIDC administrator authentication and CSRF protection remain required for Settings and operation
+  changes.
+- Integration URLs retain the public-HTTPS and SSRF-boundary policy.
+- Secret-pattern scan found no committed PAT, API key, private key, certificate, or `.env` file.
 
 ## Automated verification
 
-- Python compilation: PASS
-- Ruff lint/format: PASS
-- Automated tests: **69 passed**
-- Application-code coverage: **64%**
-- Provider auto-create and update: PASS
-- Initial and manual Sync History persistence: PASS
-- Manual asset add/edit/delete and synchronization preservation: PASS
-- Screenshot job persistence, retry, and URL security: PASS
-- Recursive/README media analysis: PASS
-- Public filters, assets, freshness, facets, and change feed: PASS
-- ETag/Last-Modified and conditional 304 behavior: PASS
-- FastAPI route smoke test: PASS
-- SQLAdmin legacy regression tests: PASS
-- Alembic offline PostgreSQL SQL generation through v0.2.1: PASS
-- Package wheel build: PASS
+- Automated tests: **78 passed**
+- Application statement coverage: **68%**
+- Ruff lint: **PASS**
+- Ruff formatting: **PASS**
+- Python compilation: **PASS**
+- SQLAlchemy PostgreSQL DDL compilation: **PASS** (13 tables)
+- Alembic PostgreSQL offline upgrade through v0.2.2: **PASS**
+- PostgreSQL JSONB tag SQL compilation: **PASS**
+- Full FastAPI lifespan/API smoke test: **PASS**
+- SQLAdmin Operations/Settings/action regression tests: **PASS**
+- Runtime credential encryption/removal/reload tests: **PASS**
+- Operation lifecycle/recovery/retry tests: **PASS**
+- Wheel and source distribution build: **PASS**
+- Dependency integrity (`pip check`): **PASS**
+- Re-extracted release test suite: **PASS**
+
+One non-blocking Starlette TestClient deprecation warning is emitted by the test dependency. It does
+not represent a production runtime failure.
 
 ## Deployment-time verification still required
 
-- Real Coolify image build and startup
-- Live PostgreSQL migration and backup confirmation
-- Keycloak callback/logout after redeployment
-- Live GitHub/GitLab/Bitbucket provider requests
-- Optional external screenshot-service contract, DNS/egress restrictions, and storage availability
-- End-to-end YGIT consumption of assets/freshness/change-feed APIs
+- Real Coolify image build/start and live PostgreSQL migration
+- Keycloak login/logout after deployment
+- Browser SSE behavior through the production reverse proxy
+- Live GitHub/GitLab/Bitbucket calls using production credentials
+- Optional screenshot and AI service behavior when enabled

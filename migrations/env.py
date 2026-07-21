@@ -9,9 +9,13 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.config import get_settings
 from app.database.base import Base
 from app.models import (  # noqa: F401
+    AdminOperation,
     Category,
+    FeatureFlag,
     Framework,
     ImportHistory,
+    IntegrationConfig,
+    OperationLog,
     Provider,
     ScreenshotJob,
     SyncHistory,

@@ -32,3 +32,19 @@ updated_at
 ```
 
 No existing table or column is removed or renamed.
+
+## v0.2.2 additive records
+
+### feature_flags
+
+Runtime feature state, administrator task permission, category, description, and updater.
+
+### integration_configs
+
+Runtime integration state, public base URL/account, encrypted secret, environment fallback,
+non-secret JSON config, and updater.
+
+### admin_operations / operation_logs
+
+Persistent task lifecycle, progress, requester, return context, result/error, retry/cancel state, and
+ordered live/exportable logs. No existing table or column is removed or renamed.

@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.2 - 2026-07-21
+
+### Operations and administrator experience
+
+- Added persistent `admin_operations` and `operation_logs` records.
+- Added live operation progress, SSE log streaming, copy/export, retry, cancel, and return links.
+- Routed repository imports, local imports, source sync, publication changes, screenshot generation,
+  and screenshot retry actions through the Operations Console.
+- Preserved the originating administrator page instead of always redirecting to the main list.
+- Added clear structured success, failure, and request-ID feedback.
+
+### Runtime Settings
+
+- Added database-backed feature ON/OFF controls and administrator task permissions.
+- Added runtime GitHub, GitLab, Bitbucket, AI, screenshot, and custom API configuration.
+- Added encrypted runtime credential storage with optional Coolify environment fallback.
+- Added immediate in-process configuration reload without redeployment.
+- Added runtime switches for the public API and individual catalog API groups.
+
+### API and stability
+
+- Fixed the PostgreSQL JSONB `tag` filter that returned HTTP 500.
+- Added structured generic HTTP 500 responses with request IDs while retaining server-side traces.
+- Added additive migration `20260721_0004_operations_runtime_settings`.
+- Removed no existing endpoint, table, column, template record, status, manifest, or Keycloak route.
+
 ## 0.2.1 - 2026-07-21
 
 ### Stabilization

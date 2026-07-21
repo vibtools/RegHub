@@ -9,9 +9,11 @@ from app.admin.views import (
     GitHubImportView,
     ImportHistoryAdmin,
     LocalImportView,
+    OperationsConsoleView,
     ProviderAdmin,
     RegistryImportView,
     ScreenshotJobAdmin,
+    SettingsView,
     SyncHistoryAdmin,
     TemplateAdmin,
     TemplateAssetAdmin,
@@ -30,6 +32,8 @@ def setup_admin(app: FastAPI) -> RegistryAdmin:
         authentication_backend=OIDCAdminAuthentication(),
     )
     for view in [
+        OperationsConsoleView,
+        SettingsView,
         GitHubImportView,
         RegistryImportView,
         LocalImportView,

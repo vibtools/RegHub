@@ -30,7 +30,7 @@ class ScreenshotService:
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "RegHub-Screenshot-Client/0.2.1",
+            "User-Agent": "RegHub-Screenshot-Client/0.2.2",
         }
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"

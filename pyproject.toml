@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reghub"
-version = "0.2.1"
+version = "0.2.2"
 description = "Registry platform for YGIT templates"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
-license = { text = "Proprietary" }
+license = "LicenseRef-Proprietary"
 authors = [{ name = "YGIT" }]
 dependencies = [
   "fastapi==0.139.2",
@@ -25,6 +25,7 @@ dependencies = [
   "python-multipart>=0.0.20,<1",
   "itsdangerous>=2.2,<3",
   "jinja2>=3.1,<4",
+  "cryptography>=44,<47",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +48,7 @@ addopts = "-ra --strict-markers"
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-exclude = ["migrations/versions"]
+exclude = ["migrations/versions", ".venv", "build", "dist", "reghub.egg-info"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "SIM", "RUF"]

@@ -98,6 +98,8 @@ class CapabilitiesRead(BaseModel):
     provider_auto_create_enabled: bool = False
     media_gallery_enabled: bool = False
     freshness_api_enabled: bool = False
+    operations_console_enabled: bool = False
+    public_api_enabled: bool = True
 
 
 class TemplateAssetRead(BaseModel):

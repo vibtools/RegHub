@@ -1,9 +1,11 @@
 import math
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
 from slugify import slugify
-from sqlalchemy import and_, asc, desc, func, or_, select
+from sqlalchemy import String, and_, asc, cast, desc, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
@@ -28,6 +30,8 @@ from app.registry.manifest import build_manifest, validate_manifest
 from app.registry.provider import ProviderService
 from app.registry.publishing import validate_template_for_publication
 
+ProgressCallback = Callable[[int, str, str], Awaitable[None]]
+
 
 class TemplateImportService:
     def __init__(
@@ -37,12 +41,21 @@ class TemplateImportService:
         analyzer: TemplateAnalyzer | None = None,
         ai_enricher: AIMetadataEnricher | None = None,
         screenshot_service: ScreenshotService | None = None,
+        provider_auto_create_enabled: bool = True,
     ) -> None:
         self._session_factory = session_factory
         self._adapters = adapters
         self._analyzer = analyzer or TemplateAnalyzer()
         self._ai_enricher = ai_enricher
         self._screenshot_service = screenshot_service
+        self._provider_auto_create_enabled = provider_auto_create_enabled
+
+    @staticmethod
+    async def _progress(
+        callback: ProgressCallback | None, value: int, message: str, level: str = "info"
+    ) -> None:
+        if callback is not None:
+            await callback(value, message, level)
 
     @property
     def adapter_names(self) -> list[str]:
@@ -56,19 +69,25 @@ class TemplateImportService:
         adapter_name: str = "github",
         category_id: UUID | None = None,
         provider_id: UUID | None = None,
+        progress: ProgressCallback | None = None,
     ) -> Template:
         repository_url = repository_url.strip()
+        await self._progress(progress, 8, "Validating repository URL")
         if not repository_url or len(repository_url) > 500:
             raise ValidationError("Repository URL is required and must not exceed 500 characters")
         history_id = await self._create_history(adapter_name, repository_url, requested_by)
+        await self._progress(progress, 15, "Import history created")
         try:
+            await self._progress(progress, 22, f"Fetching metadata from {adapter_name.title()}")
             imported = await self._adapters.get(adapter_name).import_repository(repository_url)
+            await self._progress(progress, 36, "Repository metadata received")
             template = await self.import_imported_repository(
                 imported=imported,
                 requested_by=requested_by,
                 category_id=category_id,
                 provider_id=provider_id,
                 history_id=history_id,
+                progress=progress,
             )
             return template
         except Exception as exc:
@@ -83,16 +102,30 @@ class TemplateImportService:
         category_id: UUID | None = None,
         provider_id: UUID | None = None,
         history_id: UUID | None = None,
+        progress: ProgressCallback | None = None,
     ) -> Template:
         if history_id is None:
             history_id = await self._create_history(
                 imported.adapter, imported.repository_url, requested_by
             )
         try:
+            await self._progress(progress, 42, "Analyzing repository files and package metadata")
             analysis = self._analyzer.analyze(imported)
-            if self._ai_enricher:
+            await self._progress(progress, 52, f"Framework detected: {analysis.framework_name}")
+            if self._ai_enricher and self._ai_enricher.enabled:
+                await self._progress(progress, 56, "Running optional AI metadata enrichment")
                 analysis = await self._ai_enricher.enrich(imported, analysis)
+                await self._progress(progress, 60, "AI metadata enrichment completed")
+            else:
+                await self._progress(
+                    progress,
+                    60,
+                    "AI metadata enrichment is disabled; deterministic metadata retained",
+                )
             async with self._session_factory() as session:
+                await self._progress(
+                    progress, 64, "Checking duplicates and resolving registry resources"
+                )
                 duplicate = await session.scalar(
                     select(Template).where(
                         or_(
@@ -110,6 +143,7 @@ class TemplateImportService:
                 provider = await self._resolve_provider(session, provider_id, imported)
                 framework = await FrameworkService.resolve(session, analysis.framework_slug)
                 unique_slug = await self._unique_slug(session, analysis.title or imported.name)
+                await self._progress(progress, 72, "Building Manifest v2 and media metadata")
                 manifest = build_manifest(
                     framework_slug=framework.slug,
                     repository_url=imported.repository_url,
@@ -172,6 +206,9 @@ class TemplateImportService:
                     provider=provider,
                     framework=framework,
                 )
+                await self._progress(
+                    progress, 82, "Persisting template, version, history and assets"
+                )
                 session.add(template)
                 await session.flush()
                 session.add(
@@ -232,6 +269,7 @@ class TemplateImportService:
                 history.completed_at = now
                 await session.commit()
                 await session.refresh(template)
+                await self._progress(progress, 94, "Template import transaction committed")
                 return template
         except Exception as exc:
             await self._mark_failed(history_id, str(exc))
@@ -283,14 +321,17 @@ class TemplateImportService:
             )
         return category
 
-    @classmethod
     async def _resolve_provider(
-        cls, session: AsyncSession, identifier: UUID | None, imported: ImportedRepository
+        self, session: AsyncSession, identifier: UUID | None, imported: ImportedRepository
     ) -> Provider | None:
-        selected = await cls._resolve_optional(session, Provider, identifier)
+        selected = await self._resolve_optional(session, Provider, identifier)
         if selected:
             return selected
-        return await ProviderService.resolve_for_repository(session, imported)
+        if self._provider_auto_create_enabled:
+            return await ProviderService.resolve_for_repository(session, imported)
+        return await session.scalar(
+            select(Provider).where(Provider.slug == "community", Provider.is_active.is_(True))
+        )
 
     @staticmethod
     async def _unique_slug(session: AsyncSession, name: str) -> str:
@@ -312,15 +353,28 @@ class TemplateSyncService:
         analyzer: TemplateAnalyzer | None = None,
         ai_enricher: AIMetadataEnricher | None = None,
         screenshot_service: ScreenshotService | None = None,
+        provider_auto_create_enabled: bool = True,
     ) -> None:
         self._session_factory = session_factory
         self._adapters = adapters
         self._analyzer = analyzer or TemplateAnalyzer()
         self._ai_enricher = ai_enricher
         self._screenshot_service = screenshot_service
+        self._provider_auto_create_enabled = provider_auto_create_enabled
+
+    @staticmethod
+    async def _progress(
+        callback: ProgressCallback | None, value: int, message: str, level: str = "info"
+    ) -> None:
+        if callback is not None:
+            await callback(value, message, level)
 
     async def sync_many(
-        self, identifiers: list[UUID], *, requested_by: str | None = None
+        self,
+        identifiers: list[UUID],
+        *,
+        requested_by: str | None = None,
+        progress: ProgressCallback | None = None,
     ) -> tuple[int, list[str]]:
         if not identifiers:
             raise ValidationError("No templates were selected")
@@ -328,7 +382,7 @@ class TemplateSyncService:
         errors: list[str] = []
         for identifier in identifiers:
             try:
-                await self.sync_one(identifier, requested_by=requested_by)
+                await self.sync_one(identifier, requested_by=requested_by, progress=progress)
                 synced += 1
             except Exception as exc:
                 errors.append(f"{identifier}: {exc}")
@@ -355,7 +409,14 @@ class TemplateSyncService:
             if before != after
         }
 
-    async def sync_one(self, identifier: UUID, *, requested_by: str | None = None) -> Template:
+    async def sync_one(
+        self,
+        identifier: UUID,
+        *,
+        requested_by: str | None = None,
+        progress: ProgressCallback | None = None,
+    ) -> Template:
+        await self._progress(progress, 8, "Loading template and creating sync history")
         async with self._session_factory() as session:
             template = await session.get(Template, identifier)
             if template is None:
@@ -376,10 +437,19 @@ class TemplateSyncService:
         try:
             if adapter_name not in self._adapters.names:
                 raise ValidationError(f"Template source {adapter_name} cannot be synchronized")
+            await self._progress(
+                progress, 20, f"Fetching latest metadata from {adapter_name.title()}"
+            )
             imported = await self._adapters.get(adapter_name).import_repository(repository_url)
+            await self._progress(progress, 38, "Analyzing latest repository metadata")
             analysis = self._analyzer.analyze(imported)
-            if self._ai_enricher:
+            await self._progress(progress, 48, f"Framework detected: {analysis.framework_name}")
+            if self._ai_enricher and self._ai_enricher.enabled:
+                await self._progress(progress, 52, "Running optional AI metadata enrichment")
                 analysis = await self._ai_enricher.enrich(imported, analysis)
+            await self._progress(
+                progress, 58, "Applying source updates while preserving curated fields"
+            )
             async with self._session_factory() as session:
                 template = await session.get(Template, identifier)
                 history = await session.get(SyncHistory, history_id)
@@ -434,7 +504,9 @@ class TemplateSyncService:
                     (url for url in combined_screenshots if url.startswith("https://")), None
                 )
                 template.framework = framework
-                if template.provider is None or template.provider.slug == "community":
+                if self._provider_auto_create_enabled and (
+                    template.provider is None or template.provider.slug == "community"
+                ):
                     template.provider = await ProviderService.resolve_for_repository(
                         session, imported
                     )
@@ -482,8 +554,12 @@ class TemplateSyncService:
                 history.metadata_snapshot = imported.metadata
                 history.changes = changes
                 history.completed_at = now
+                await self._progress(
+                    progress, 88, "Committing sync history, assets and version snapshot"
+                )
                 await session.commit()
                 await session.refresh(template)
+                await self._progress(progress, 96, "Source synchronization completed")
                 return template
         except Exception as exc:
             async with self._session_factory() as session:
@@ -548,7 +624,15 @@ class TemplateService:
         if featured is not None:
             filters.append(Template.is_featured.is_(featured))
         if tag:
-            filters.append(Template.topics.contains([tag.casefold()]))
+            normalized_tag = tag.strip().casefold()
+            bind = session.get_bind()
+            if bind.dialect.name == "postgresql":
+                filters.append(Template.topics.op("@>")(cast([normalized_tag], JSONB)))
+            else:
+                escaped = (
+                    normalized_tag.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                )
+                filters.append(cast(Template.topics, String).ilike(f'%"{escaped}"%', escape="\\"))
         if language:
             filters.append(func.lower(Template.primary_language) == language.casefold())
         if difficulty:

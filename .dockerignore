@@ -7,3 +7,6 @@ __pycache__
 tests
 *.pyc
 .env
+build
+dist
+*.egg-info

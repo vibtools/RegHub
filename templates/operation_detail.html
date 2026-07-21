@@ -1,0 +1,109 @@
+{% extends "sqladmin/layout.html" %}
+{% block content %}
+<style>
+  .reghub-log { background:#0b1020; color:#d7e0ff; border-radius:8px; min-height:360px; max-height:60vh; overflow:auto; padding:16px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; line-height:1.55; white-space:pre-wrap; }
+  .reghub-log-line[data-level="error"] { color:#ff9b9b; }
+  .reghub-log-line[data-level="warning"] { color:#ffd479; }
+  .reghub-log-line[data-level="debug"] { color:#9fb2d9; }
+  .reghub-pulse { animation: reghub-pulse 1.4s infinite; }
+  @keyframes reghub-pulse { 0%,100% { opacity:1 } 50% { opacity:.55 } }
+</style>
+<div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
+  <div>
+    <h2 class="page-title">{{ operation.title }}</h2>
+    <div class="text-secondary">Operation {{ operation.id }} · {{ operation.operation_type }}</div>
+  </div>
+  <div class="btn-list">
+    <a class="btn btn-outline-secondary" href="/admin/operations">All operations</a>
+    {% if operation.return_url %}<a class="btn btn-outline-primary" href="{{ operation.return_url }}">Back to previous page</a>{% endif %}
+  </div>
+</div>
+<div class="row row-cards">
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex justify-content-between"><h3 class="card-title">Live progress</h3><span id="statusBadge" class="badge">{{ operation.status.value }}</span></div>
+      <div class="card-body">
+        <div class="d-flex justify-content-between mb-2"><span id="statusText">{{ operation.status.value|title }}</span><strong id="progressText">{{ operation.progress }}%</strong></div>
+        <div class="progress progress-lg"><div id="progressBar" class="progress-bar" style="width:{{ operation.progress }}%"></div></div>
+        <div id="errorBox" class="alert alert-danger mt-3 {% if not operation.error_message %}d-none{% endif %}">{{ operation.error_message or '' }}</div>
+        <div id="resultBox" class="alert alert-success mt-3 {% if operation.status.value != 'succeeded' %}d-none{% endif %}">Operation completed successfully.</div>
+      </div>
+    </div>
+    <div class="card mt-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h3 class="card-title">Debug logs</h3>
+        <div class="btn-list"><button id="copyLogs" type="button" class="btn btn-sm btn-outline-secondary">Copy logs</button><a class="btn btn-sm btn-outline-secondary" href="/admin/operations/{{ operation.id }}/logs.txt">Export .txt</a></div>
+      </div>
+      <div class="card-body"><div id="logOutput" class="reghub-log">{% for item in operation.logs %}<div class="reghub-log-line" data-sequence="{{ item.sequence }}" data-level="{{ item.level }}">{{ item.created_at.isoformat() }} [{{ item.level|upper }}] {{ item.message }}</div>{% endfor %}</div></div>
+    </div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card">
+      <div class="card-header"><h3 class="card-title">Operation controls</h3></div>
+      <div class="card-body">
+        <dl class="row"><dt class="col-5">Requested by</dt><dd class="col-7">{{ operation.requested_by or 'system' }}</dd><dt class="col-5">Created</dt><dd class="col-7">{{ operation.created_at }}</dd><dt class="col-5">Started</dt><dd class="col-7">{{ operation.started_at or '-' }}</dd><dt class="col-5">Completed</dt><dd id="completedAt" class="col-7">{{ operation.completed_at or '-' }}</dd></dl>
+        <div class="d-grid gap-2">
+          <form id="cancelForm" method="post" action="/admin/operations/{{ operation.id }}/cancel" class="{% if terminal %}d-none{% endif %}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-warning w-100" type="submit">Cancel operation</button></form>
+          <form id="retryForm" method="post" action="/admin/operations/{{ operation.id }}/retry" class="{% if operation.status.value not in ['failed','cancelled'] %}d-none{% endif %}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="btn btn-primary w-100" type="submit">Retry operation</button></form>
+        </div>
+      </div>
+    </div>
+    {% if operation.result_payload %}<div class="card mt-3"><div class="card-header"><h3 class="card-title">Result</h3></div><div class="card-body"><pre id="resultJson" class="small mb-0">{{ operation.result_payload | tojson(indent=2) }}</pre></div></div>{% endif %}
+  </div>
+</div>
+<script>
+(() => {
+  const operationId = {{ operation.id|string|tojson }};
+  const output = document.getElementById('logOutput');
+  const progressBar = document.getElementById('progressBar');
+  const progressText = document.getElementById('progressText');
+  const statusText = document.getElementById('statusText');
+  const badge = document.getElementById('statusBadge');
+  const errorBox = document.getElementById('errorBox');
+  const resultBox = document.getElementById('resultBox');
+  const cancelForm = document.getElementById('cancelForm');
+  const retryForm = document.getElementById('retryForm');
+  let lastSequence = 0;
+  output.querySelectorAll('[data-sequence]').forEach(el => { lastSequence = Math.max(lastSequence, Number(el.dataset.sequence || 0)); });
+  const terminal = new Set(['succeeded','failed','cancelled']);
+  function setStatus(data) {
+    const value = data.status || 'queued';
+    const progress = Number(data.progress || 0);
+    statusText.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+    progressText.textContent = `${progress}%`;
+    progressBar.style.width = `${progress}%`;
+    badge.textContent = value;
+    badge.className = `badge bg-${value === 'succeeded' ? 'green' : value === 'failed' ? 'red' : value === 'running' ? 'yellow' : value === 'cancelled' ? 'secondary' : 'blue'}-lt`;
+    badge.classList.toggle('reghub-pulse', value === 'running' || value === 'queued');
+    if (data.error) { errorBox.textContent = data.error; errorBox.classList.remove('d-none'); }
+    if (value === 'succeeded') resultBox.classList.remove('d-none');
+    if (terminal.has(value)) {
+      cancelForm.classList.add('d-none');
+      retryForm.classList.toggle('d-none', !['failed','cancelled'].includes(value));
+    }
+  }
+  function addLog(data) {
+    if (Number(data.sequence || 0) <= lastSequence) return;
+    lastSequence = Number(data.sequence || lastSequence);
+    const line = document.createElement('div');
+    line.className = 'reghub-log-line';
+    line.dataset.sequence = data.sequence;
+    line.dataset.level = data.level || 'info';
+    line.textContent = `${data.created_at || ''} [${String(data.level || 'info').toUpperCase()}] ${data.message || ''}`;
+    output.appendChild(line);
+    output.scrollTop = output.scrollHeight;
+  }
+  const events = new EventSource(`/admin/operations/${operationId}/events?after=${lastSequence}`);
+  events.addEventListener('log', event => { const data = JSON.parse(event.data); addLog(data); setStatus(data); });
+  events.addEventListener('status', event => setStatus(JSON.parse(event.data)));
+  events.addEventListener('done', event => { setStatus(JSON.parse(event.data)); events.close(); });
+  events.onerror = () => { if (!terminal.has(badge.textContent)) statusText.textContent = 'Reconnecting to operation logs…'; };
+  document.getElementById('copyLogs').addEventListener('click', async () => {
+    const text = Array.from(output.querySelectorAll('.reghub-log-line')).map(el => el.textContent).join('\n');
+    await navigator.clipboard.writeText(text);
+    document.getElementById('copyLogs').textContent = 'Copied';
+    setTimeout(() => document.getElementById('copyLogs').textContent = 'Copy logs', 1400);
+  });
+})();
+</script>
+{% endblock %}

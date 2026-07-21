@@ -1,7 +1,11 @@
+import asyncio
 import json
 import logging
 import secrets
+import tempfile
 from hmac import compare_digest
+from pathlib import Path
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from sqladmin import BaseView, ModelView, action, expose
@@ -9,9 +13,14 @@ from sqladmin.filters import BooleanFilter, ForeignKeyFilter, StaticValuesFilter
 from sqlalchemy import select
 from starlette.datastructures import URL, UploadFile
 from starlette.requests import Request
-from starlette.responses import RedirectResponse
+from starlette.responses import (
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    StreamingResponse,
+)
 
-from app.core.enums import TemplateStatus
+from app.core.enums import OperationStatus, TemplateStatus
 from app.core.exceptions import RegistryError, ValidationError
 from app.database.session import async_session_factory
 from app.models.category import Category
@@ -23,11 +32,42 @@ from app.models.sync_history import SyncHistory
 from app.models.template import Template
 from app.models.template_asset import TemplateAsset
 from app.models.template_version import TemplateVersion
-from app.registry.local import repository_from_manifest, repository_from_zip
 from app.registry.media import TemplateAssetService
-from app.registry.template import TemplateService
 
 logger = logging.getLogger(__name__)
+_TERMINAL_OPERATION_VALUES = {
+    OperationStatus.SUCCEEDED.value,
+    OperationStatus.FAILED.value,
+    OperationStatus.CANCELLED.value,
+}
+
+
+def _safe_admin_return_url(request: Request, default: str = "/admin/template/list") -> str:
+    candidate = request.query_params.get("return_url") or request.headers.get("referer")
+    if not candidate:
+        return default
+    parsed = urlsplit(candidate)
+    if parsed.scheme or parsed.netloc:
+        if parsed.netloc != request.url.netloc:
+            return default
+        candidate = parsed.path + (f"?{parsed.query}" if parsed.query else "")
+    if not candidate.startswith("/admin") or candidate.startswith("//"):
+        return default
+    return candidate[:1000]
+
+
+def _operation_url(operation_id: UUID) -> str:
+    return f"/admin/operations/{operation_id}"
+
+
+def _write_temporary_zip(data: bytes) -> str:
+    temp_dir = Path(tempfile.gettempdir()) / "reghub-operations"
+    temp_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="wb", suffix=".zip", prefix="upload-", dir=temp_dir, delete=False
+    ) as handle:
+        handle.write(data)
+        return handle.name
 
 
 class CategoryAdmin(ModelView, model=Category):
@@ -114,17 +154,46 @@ class TemplateAdmin(ModelView, model=Template):
     @staticmethod
     def _selected_ids(request: Request) -> list[UUID]:
         raw = request.query_params.get("pks", "")
-        return [UUID(value) for value in raw.split(",") if value]
+        try:
+            return [UUID(value) for value in raw.split(",") if value]
+        except ValueError as exc:
+            raise ValidationError("Selected template identifiers are invalid") from exc
+
+    async def _queue(
+        self,
+        request: Request,
+        *,
+        operation_type: str,
+        title: str,
+        payload: dict[str, object],
+    ) -> RedirectResponse:
+        container = self._admin_ref.app.state.container
+        container.require_feature("operations_console", task=True)
+        operation = await container.operation_service.create(
+            operation_type=operation_type,
+            title=title,
+            requested_by=request.state.admin_identity.subject,
+            input_payload=payload,
+            return_url=_safe_admin_return_url(request),
+        )
+        container.operation_runner.enqueue(operation.id)
+        return RedirectResponse(_operation_url(operation.id), status_code=302)
 
     async def _set_status(self, request: Request, status: TemplateStatus):
-        ids = self._selected_ids(request)
-        list_url = URL(str(request.url_for("admin:list", identity=self.identity)))
-        try:
-            async with async_session_factory() as session:
-                await TemplateService.set_status(session, ids, status)
-        except (RegistryError, ValueError) as exc:
-            list_url = list_url.include_query_params(error=str(exc))
-        return RedirectResponse(list_url, status_code=302)
+        identifiers = self._selected_ids(request)
+        if not identifiers:
+            return RedirectResponse(
+                URL(_safe_admin_return_url(request)).include_query_params(
+                    error="No templates were selected"
+                ),
+                status_code=302,
+            )
+        return await self._queue(
+            request,
+            operation_type="set_template_status",
+            title=f"Set {len(identifiers)} template(s) to {status.value}",
+            payload={"template_ids": [str(value) for value in identifiers], "status": status.value},
+        )
 
     @action("publish", "Publish", "Publish the selected templates?")
     async def publish(self, request: Request):
@@ -142,57 +211,44 @@ class TemplateAdmin(ModelView, model=Template):
         "sync_source", "Sync Source", "Refresh metadata and analysis from the selected sources?"
     )
     async def sync_source(self, request: Request):
-        list_url = URL(str(request.url_for("admin:list", identity=self.identity)))
-        try:
-            (
-                synced,
-                errors,
-            ) = await self._admin_ref.app.state.container.template_sync_service.sync_many(
-                self._selected_ids(request),
-                requested_by=request.state.admin_identity.subject,
-            )
-            if errors:
-                list_url = list_url.include_query_params(
-                    error=f"Synced {synced}; {len(errors)} failed. Check Sync History."
-                )
-        except (RegistryError, ValueError) as exc:
-            list_url = list_url.include_query_params(error=str(exc))
-        return RedirectResponse(list_url, status_code=302)
-
-    @action("generate_thumbnail", "Generate Thumbnail", "Generate thumbnails from preview URLs?")
-    async def generate_thumbnail(self, request: Request):
-        list_url = URL(str(request.url_for("admin:list", identity=self.identity)))
-        service = self._admin_ref.app.state.container.screenshot_job_service
-        if not service.enabled:
-            return RedirectResponse(
-                list_url.include_query_params(error="SCREENSHOT_SERVICE_URL is not configured"),
-                status_code=302,
-            )
         identifiers = self._selected_ids(request)
         if not identifiers:
             return RedirectResponse(
-                list_url.include_query_params(error="No templates were selected"),
+                URL(_safe_admin_return_url(request)).include_query_params(
+                    error="No templates were selected"
+                ),
+                status_code=302,
+            )
+        return await self._queue(
+            request,
+            operation_type="sync_templates",
+            title=f"Synchronize {len(identifiers)} template source(s)",
+            payload={"template_ids": [str(value) for value in identifiers]},
+        )
+
+    @action("generate_thumbnail", "Generate Thumbnail", "Generate thumbnails from preview URLs?")
+    async def generate_thumbnail(self, request: Request):
+        identifiers = self._selected_ids(request)
+        if not identifiers:
+            return RedirectResponse(
+                URL(_safe_admin_return_url(request)).include_query_params(
+                    error="No templates were selected"
+                ),
                 status_code=302,
             )
         if len(identifiers) > 10:
             return RedirectResponse(
-                list_url.include_query_params(error="Generate at most 10 thumbnails at a time"),
+                URL(_safe_admin_return_url(request)).include_query_params(
+                    error="Generate at most 10 thumbnails at a time"
+                ),
                 status_code=302,
             )
-        generated = 0
-        errors: list[str] = []
-        for identifier in identifiers:
-            try:
-                await service.create_and_run(identifier, request.state.admin_identity.subject)
-                generated += 1
-            except Exception as exc:
-                logger.exception("Screenshot job failed for template %s", identifier)
-                errors.append(str(exc))
-        if errors:
-            list_url = list_url.include_query_params(
-                error=f"Generated {generated}; {len(errors)} failed. Check Screenshot Jobs."
-            )
-        return RedirectResponse(list_url, status_code=302)
+        return await self._queue(
+            request,
+            operation_type="generate_thumbnails",
+            title=f"Generate {len(identifiers)} template thumbnail(s)",
+            payload={"template_ids": [str(value) for value in identifiers]},
+        )
 
 
 class ImportHistoryAdmin(ModelView, model=ImportHistory):
@@ -281,52 +337,31 @@ class ScreenshotJobAdmin(ModelView, model=ScreenshotJob):
 
     @action("retry", "Retry", "Retry the selected screenshot jobs?")
     async def retry(self, request: Request):
-        list_url = URL(str(request.url_for("admin:list", identity=self.identity)))
         raw = request.query_params.get("pks", "")
-        identifiers = [UUID(value) for value in raw.split(",") if value]
+        try:
+            identifiers = [UUID(value) for value in raw.split(",") if value]
+        except ValueError as exc:
+            raise ValidationError("Selected screenshot job identifiers are invalid") from exc
+        return_url = _safe_admin_return_url(request, "/admin/screenshot-job/list")
         if not identifiers:
             return RedirectResponse(
-                list_url.include_query_params(error="No screenshot jobs were selected"),
+                URL(return_url).include_query_params(error="No screenshot jobs were selected"),
                 status_code=302,
             )
-        if len(identifiers) > 10:
-            return RedirectResponse(
-                list_url.include_query_params(error="Retry at most 10 screenshot jobs at a time"),
-                status_code=302,
-            )
-        service = self._admin_ref.app.state.container.screenshot_job_service
-        if not service.enabled:
-            return RedirectResponse(
-                list_url.include_query_params(error="SCREENSHOT_SERVICE_URL is not configured"),
-                status_code=302,
-            )
-        retried = 0
-        errors: list[str] = []
-        for identifier in identifiers:
-            try:
-                await service.retry(identifier, request.state.admin_identity.subject)
-                retried += 1
-            except Exception as exc:
-                logger.exception("Screenshot retry failed for job %s", identifier)
-                errors.append(str(exc))
-        if errors:
-            list_url = list_url.include_query_params(
-                error=f"Retried {retried}; {len(errors)} failed. Check job details."
-            )
-        return RedirectResponse(list_url, status_code=302)
+        container = self._admin_ref.app.state.container
+        container.require_feature("operations_console", task=True)
+        operation = await container.operation_service.create(
+            operation_type="retry_screenshot_jobs",
+            title=f"Retry {len(identifiers)} screenshot job(s)",
+            requested_by=request.state.admin_identity.subject,
+            input_payload={"job_ids": [str(value) for value in identifiers]},
+            return_url=return_url,
+        )
+        container.operation_runner.enqueue(operation.id)
+        return RedirectResponse(_operation_url(operation.id), status_code=302)
 
 
-class _ImportBaseView(BaseView):
-    async def _choices(self) -> tuple[list[Category], list[Provider]]:
-        async with async_session_factory() as session:
-            categories = list(
-                (await session.scalars(select(Category).where(Category.is_active.is_(True)))).all()
-            )
-            providers = list(
-                (await session.scalars(select(Provider).where(Provider.is_active.is_(True)))).all()
-            )
-        return categories, providers
-
+class _AdminBaseView(BaseView):
     def _csrf(self, request: Request, key: str) -> str:
         token = request.session.get(key)
         if not isinstance(token, str):
@@ -340,8 +375,291 @@ class _ImportBaseView(BaseView):
         if not submitted or not compare_digest(submitted, expected):
             raise ValidationError("The form session expired. Reload the page and try again.")
 
+    async def _choices(self) -> tuple[list[Category], list[Provider]]:
+        async with async_session_factory() as session:
+            categories = list(
+                (await session.scalars(select(Category).where(Category.is_active.is_(True)))).all()
+            )
+            providers = list(
+                (await session.scalars(select(Provider).where(Provider.is_active.is_(True)))).all()
+            )
+        return categories, providers
 
-class GitHubImportView(_ImportBaseView):
+    async def _queue_operation(
+        self,
+        request: Request,
+        *,
+        operation_type: str,
+        title: str,
+        payload: dict[str, object],
+        return_url: str,
+    ) -> RedirectResponse:
+        container = self._admin_ref.app.state.container
+        container.require_feature("operations_console", task=True)
+        operation = await container.operation_service.create(
+            operation_type=operation_type,
+            title=title,
+            requested_by=request.state.admin_identity.subject,
+            input_payload=payload,
+            return_url=return_url,
+        )
+        container.operation_runner.enqueue(operation.id)
+        return RedirectResponse(_operation_url(operation.id), status_code=302)
+
+
+class OperationsConsoleView(_AdminBaseView):
+    name = "Operations"
+    icon = "fa-solid fa-terminal"
+
+    @expose("/operations", methods=["GET"])
+    async def operations(self, request: Request):
+        container = self._admin_ref.app.state.container
+        operations = await container.operation_service.list_recent()
+        return await self.templates.TemplateResponse(
+            request,
+            "operations_list.html",
+            {
+                "title": "Operations Console",
+                "operations": operations,
+                "enabled": container.feature_enabled("operations_console"),
+            },
+        )
+
+    @expose("/operations/{operation_id}", methods=["GET"])
+    async def operation_detail(self, request: Request):
+        operation_id = UUID(request.path_params["operation_id"])
+        operation = await self._admin_ref.app.state.container.operation_service.get(
+            operation_id, with_logs=True
+        )
+        csrf_token = self._csrf(request, "operation_action_csrf")
+        return await self.templates.TemplateResponse(
+            request,
+            "operation_detail.html",
+            {
+                "title": operation.title,
+                "operation": operation,
+                "csrf_token": csrf_token,
+                "terminal": operation.status.value in _TERMINAL_OPERATION_VALUES,
+            },
+        )
+
+    @expose("/operations/{operation_id}/status", methods=["GET"])
+    async def operation_status(self, request: Request):
+        operation = await self._admin_ref.app.state.container.operation_service.get(
+            UUID(request.path_params["operation_id"])
+        )
+        return JSONResponse(
+            {
+                "id": str(operation.id),
+                "status": operation.status.value,
+                "progress": operation.progress,
+                "error": operation.error_message,
+                "result": operation.result_payload,
+                "completed_at": operation.completed_at.isoformat()
+                if operation.completed_at
+                else None,
+            }
+        )
+
+    @expose("/operations/{operation_id}/events", methods=["GET"])
+    async def operation_events(self, request: Request):
+        operation_id = UUID(request.path_params["operation_id"])
+        service = self._admin_ref.app.state.container.operation_service
+
+        async def stream():
+            sequence = int(request.query_params.get("after", "0") or 0)
+            while True:
+                if await request.is_disconnected():
+                    return
+                operation = await service.get(operation_id)
+                logs = await service.logs_since(operation_id, sequence)
+                for item in logs:
+                    sequence = item.sequence
+                    payload = json.dumps(
+                        {
+                            "sequence": item.sequence,
+                            "level": item.level,
+                            "message": item.message,
+                            "data": item.data,
+                            "created_at": item.created_at.isoformat(),
+                            "progress": operation.progress,
+                            "status": operation.status.value,
+                        },
+                        separators=(",", ":"),
+                    )
+                    yield f"id: {item.sequence}\nevent: log\ndata: {payload}\n\n"
+                status_payload = json.dumps(
+                    {
+                        "status": operation.status.value,
+                        "progress": operation.progress,
+                        "error": operation.error_message,
+                        "result": operation.result_payload,
+                    },
+                    separators=(",", ":"),
+                )
+                yield f"event: status\ndata: {status_payload}\n\n"
+                if operation.status.value in _TERMINAL_OPERATION_VALUES:
+                    yield f"event: done\ndata: {status_payload}\n\n"
+                    return
+                await asyncio.sleep(0.75)
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+                "Connection": "keep-alive",
+            },
+        )
+
+    @expose("/operations/{operation_id}/logs.txt", methods=["GET"])
+    async def operation_logs(self, request: Request):
+        operation = await self._admin_ref.app.state.container.operation_service.get(
+            UUID(request.path_params["operation_id"]), with_logs=True
+        )
+        lines = [
+            f"RegHub operation: {operation.title}",
+            f"ID: {operation.id}",
+            f"Status: {operation.status.value}",
+            "=" * 88,
+        ]
+        lines.extend(
+            f"{item.created_at.isoformat()} [{item.level.upper()}] {item.message}"
+            for item in operation.logs
+        )
+        return PlainTextResponse(
+            "\n".join(lines) + "\n",
+            headers={
+                "Content-Disposition": f'attachment; filename="reghub-operation-{operation.id}.txt"'
+            },
+        )
+
+    @expose("/operations/{operation_id}/retry", methods=["POST"])
+    async def retry_operation(self, request: Request):
+        csrf = self._csrf(request, "operation_action_csrf")
+        form = await request.form()
+        self._validate_csrf(form, csrf)
+        container = self._admin_ref.app.state.container
+        operation = await container.operation_service.clone_for_retry(
+            UUID(request.path_params["operation_id"]), request.state.admin_identity.subject
+        )
+        container.operation_runner.enqueue(operation.id)
+        return RedirectResponse(_operation_url(operation.id), status_code=302)
+
+    @expose("/operations/{operation_id}/cancel", methods=["POST"])
+    async def cancel_operation(self, request: Request):
+        csrf = self._csrf(request, "operation_action_csrf")
+        form = await request.form()
+        self._validate_csrf(form, csrf)
+        operation_id = UUID(request.path_params["operation_id"])
+        await self._admin_ref.app.state.container.operation_runner.request_cancel(operation_id)
+        return RedirectResponse(_operation_url(operation_id), status_code=302)
+
+
+class SettingsView(_AdminBaseView):
+    name = "Settings"
+    icon = "fa-solid fa-sliders"
+
+    @staticmethod
+    def _bool(form: object, key: str) -> bool:
+        return str(form.get(key, "")).casefold() in {"1", "true", "on", "yes"}  # type: ignore[attr-defined]
+
+    @expose("/settings", methods=["GET", "POST"])
+    async def settings(self, request: Request):
+        csrf_token = self._csrf(request, "settings_csrf")
+        container = self._admin_ref.app.state.container
+        success: str | None = None
+        error: str | None = None
+        if request.method == "POST":
+            form = await request.form()
+            try:
+                self._validate_csrf(form, csrf_token)
+                action_name = str(form.get("action", ""))
+                identity = request.state.admin_identity.subject
+                if action_name == "save_features":
+                    features = await container.runtime_settings.feature_rows()
+                    await container.runtime_settings.update_features_bulk(
+                        {
+                            item.key: (
+                                self._bool(form, f"enabled__{item.key}"),
+                                self._bool(form, f"task__{item.key}"),
+                            )
+                            for item in features
+                        },
+                        updated_by=identity,
+                    )
+                    await container.reload_runtime()
+                    success = "Feature controls updated immediately. No redeploy was required."
+                elif action_name == "save_integration":
+                    raw_config = str(form.get("config_json", "{}")).strip() or "{}"
+                    config = json.loads(raw_config)
+                    if not isinstance(config, dict):
+                        raise ValidationError("Integration config JSON must be an object")
+                    await container.runtime_settings.upsert_integration(
+                        slug=str(form.get("slug", "")),
+                        name=str(form.get("name", "")),
+                        integration_type=str(form.get("integration_type", "custom")),
+                        enabled=self._bool(form, "enabled"),
+                        base_url=str(form.get("base_url", "")) or None,
+                        username=str(form.get("username", "")) or None,
+                        secret=str(form.get("secret", "")) or None,
+                        clear_secret=self._bool(form, "clear_secret"),
+                        use_environment_fallback=self._bool(form, "use_environment_fallback"),
+                        config=config,
+                        updated_by=identity,
+                    )
+                    await container.reload_runtime()
+                    success = "Integration configuration saved and loaded immediately."
+                elif action_name == "remove_integration":
+                    await container.runtime_settings.remove_integration(
+                        str(form.get("slug", "")), updated_by=identity
+                    )
+                    await container.reload_runtime()
+                    success = "Integration runtime configuration removed or disabled."
+                elif action_name == "reload_runtime":
+                    await container.reload_runtime()
+                    success = "Runtime configuration reloaded."
+                else:
+                    raise ValidationError("Unsupported settings action")
+            except json.JSONDecodeError:
+                error = "Integration config JSON is invalid"
+            except (RegistryError, ValueError) as exc:
+                error = str(exc)
+            except Exception:
+                logger.exception("Unexpected settings update failure")
+                error = "Settings update failed unexpectedly. Check application logs."
+
+        features = await container.runtime_settings.feature_rows()
+        integrations = await container.runtime_settings.integration_rows()
+        integration_cards = []
+        for item in integrations:
+            status = container.runtime_settings.integration_status(item)
+            integration_cards.append(
+                {
+                    "row": item,
+                    "status": status,
+                    "config_json": json.dumps(item.config or {}, indent=2, sort_keys=True),
+                }
+            )
+        grouped_features: dict[str, list[object]] = {}
+        for feature in features:
+            grouped_features.setdefault(feature.category, []).append(feature)
+        return await self.templates.TemplateResponse(
+            request,
+            "settings.html",
+            {
+                "title": "RegHub Settings",
+                "csrf_token": csrf_token,
+                "feature_groups": grouped_features,
+                "integration_cards": integration_cards,
+                "success": success,
+                "error": error,
+            },
+        )
+
+
+class GitHubImportView(_AdminBaseView):
     name = "GitHub Import"
     icon = "fa-brands fa-github"
 
@@ -349,39 +667,43 @@ class GitHubImportView(_ImportBaseView):
     async def github_import(self, request: Request):
         csrf_token = self._csrf(request, "github_import_csrf")
         categories, providers = await self._choices()
+        container = self._admin_ref.app.state.container
+        feature_flag_enabled = container.feature_enabled("github_import", task=True)
+        integration_enabled = "github" in container.adapter_names
+        enabled = feature_flag_enabled and integration_enabled
         context: dict[str, object] = {
             "title": "Import GitHub Repository",
             "csrf_token": csrf_token,
             "categories": categories,
             "providers": providers,
-            "github_authenticated": self._admin_ref.app.state.container.github_authenticated,
+            "github_authenticated": container.github_authenticated,
+            "feature_enabled": enabled,
+            "feature_flag_enabled": feature_flag_enabled,
+            "integration_enabled": integration_enabled,
         }
         if request.method == "POST":
             form = await request.form()
             try:
                 self._validate_csrf(form, csrf_token)
-                identity = request.state.admin_identity
-                import_service = self._admin_ref.app.state.container.template_import_service
-                template = await import_service.import_repository(
-                    repository_url=str(form.get("repository_url", "")).strip(),
-                    requested_by=identity.subject,
-                    adapter_name="github",
-                    category_id=UUID(str(form["category_id"])) if form.get("category_id") else None,
-                    provider_id=UUID(str(form["provider_id"])) if form.get("provider_id") else None,
-                )
-                context["success"] = (
-                    f"{template.name} imported as draft. Framework: {template.framework.name}; "
-                    f"quality score: {template.quality_score}/100."
+                container.require_feature("github_import", task=True)
+                return await self._queue_operation(
+                    request,
+                    operation_type="import_repository",
+                    title="Import GitHub repository",
+                    payload={
+                        "adapter": "github",
+                        "repository_url": str(form.get("repository_url", "")).strip(),
+                        "category_id": str(form.get("category_id", "")) or None,
+                        "provider_id": str(form.get("provider_id", "")) or None,
+                    },
+                    return_url="/admin/github-import",
                 )
             except (RegistryError, ValueError) as exc:
                 context["error"] = str(exc)
-            except Exception:
-                logger.exception("Unexpected GitHub import failure")
-                context["error"] = "The import failed unexpectedly. Check the application logs."
         return await self.templates.TemplateResponse(request, "github_import.html", context)
 
 
-class RegistryImportView(_ImportBaseView):
+class RegistryImportView(_AdminBaseView):
     name = "Registry Import"
     icon = "fa-solid fa-cloud-arrow-down"
 
@@ -395,7 +717,11 @@ class RegistryImportView(_ImportBaseView):
             "csrf_token": csrf_token,
             "categories": categories,
             "providers": providers,
-            "adapters": [name for name in container.adapter_names if name != "github"],
+            "adapters": [
+                name
+                for name in container.adapter_names
+                if name != "github" and container.feature_enabled(f"{name}_import", task=True)
+            ],
             "gitlab_authenticated": container.gitlab_authenticated,
             "bitbucket_authenticated": container.bitbucket_authenticated,
         }
@@ -404,27 +730,25 @@ class RegistryImportView(_ImportBaseView):
             try:
                 self._validate_csrf(form, csrf_token)
                 adapter = str(form.get("adapter", ""))
-                identity = request.state.admin_identity
-                template = await container.template_import_service.import_repository(
-                    repository_url=str(form.get("repository_url", "")).strip(),
-                    requested_by=identity.subject,
-                    adapter_name=adapter,
-                    category_id=UUID(str(form["category_id"])) if form.get("category_id") else None,
-                    provider_id=UUID(str(form["provider_id"])) if form.get("provider_id") else None,
-                )
-                context["success"] = (
-                    f"{template.name} imported from {adapter} as draft. "
-                    f"Framework: {template.framework.name}."
+                container.require_feature(f"{adapter}_import", task=True)
+                return await self._queue_operation(
+                    request,
+                    operation_type="import_repository",
+                    title=f"Import {adapter.title()} repository",
+                    payload={
+                        "adapter": adapter,
+                        "repository_url": str(form.get("repository_url", "")).strip(),
+                        "category_id": str(form.get("category_id", "")) or None,
+                        "provider_id": str(form.get("provider_id", "")) or None,
+                    },
+                    return_url="/admin/registry-import",
                 )
             except (RegistryError, ValueError) as exc:
                 context["error"] = str(exc)
-            except Exception:
-                logger.exception("Unexpected registry import failure")
-                context["error"] = "The import failed unexpectedly. Check the application logs."
         return await self.templates.TemplateResponse(request, "registry_import.html", context)
 
 
-class LocalImportView(_ImportBaseView):
+class LocalImportView(_AdminBaseView):
     name = "Local Import"
     icon = "fa-solid fa-file-zipper"
 
@@ -445,48 +769,51 @@ class LocalImportView(_ImportBaseView):
             form = await request.form()
             try:
                 self._validate_csrf(form, csrf_token)
-                if not container.local_upload_enabled:
-                    raise ValidationError("Local upload is disabled by LOCAL_UPLOAD_ENABLED")
+                container.require_feature("local_import", task=True)
                 import_type = str(form.get("import_type", "manifest"))
+                common = {
+                    "category_id": str(form.get("category_id", "")) or None,
+                    "provider_id": str(form.get("provider_id", "")) or None,
+                }
                 if import_type == "manifest":
                     payload = json.loads(str(form.get("manifest_json", "")))
                     if not isinstance(payload, dict):
                         raise ValidationError("Manifest JSON must be an object")
-                    imported = repository_from_manifest(payload)
-                elif import_type == "zip":
+                    return await self._queue_operation(
+                        request,
+                        operation_type="import_local_manifest",
+                        title="Import local manifest",
+                        payload={**common, "manifest": payload},
+                        return_url="/admin/local-import",
+                    )
+                if import_type == "zip":
                     upload = form.get("zip_file")
                     if not isinstance(upload, UploadFile) or not upload.filename:
                         raise ValidationError("Select a ZIP file")
                     data = await upload.read(container.local_upload_max_bytes + 1)
                     if len(data) > container.local_upload_max_bytes:
-                        raise ValidationError("ZIP exceeds LOCAL_UPLOAD_MAX_BYTES")
-                    imported = repository_from_zip(
-                        data,
-                        upload.filename,
-                        max_uncompressed_bytes=container.local_upload_max_uncompressed_bytes,
-                        max_entries=container.local_upload_max_entries,
+                        raise ValidationError("ZIP exceeds the configured maximum upload size")
+                    temporary_path = await asyncio.to_thread(_write_temporary_zip, data)
+                    return await self._queue_operation(
+                        request,
+                        operation_type="import_local_zip",
+                        title=f"Inspect and import {upload.filename}",
+                        payload={
+                            **common,
+                            "filename": upload.filename,
+                            "temporary_path": temporary_path,
+                        },
+                        return_url="/admin/local-import",
                     )
-                else:
-                    raise ValidationError("Unsupported local import type")
-                identity = request.state.admin_identity
-                template = await container.template_import_service.import_imported_repository(
-                    imported=imported,
-                    requested_by=identity.subject,
-                    category_id=UUID(str(form["category_id"])) if form.get("category_id") else None,
-                    provider_id=UUID(str(form["provider_id"])) if form.get("provider_id") else None,
-                )
-                context["success"] = f"{template.name} imported as draft from {import_type}."
+                raise ValidationError("Unsupported local import type")
             except json.JSONDecodeError:
                 context["error"] = "Manifest JSON is invalid"
             except (RegistryError, ValueError) as exc:
                 context["error"] = str(exc)
-            except Exception:
-                logger.exception("Unexpected local import failure")
-                context["error"] = "The import failed unexpectedly. Check the application logs."
         return await self.templates.TemplateResponse(request, "local_import.html", context)
 
 
-class AssetGalleryView(_ImportBaseView):
+class AssetGalleryView(_AdminBaseView):
     name = "Asset Gallery"
     icon = "fa-solid fa-photo-film"
 
@@ -496,10 +823,12 @@ class AssetGalleryView(_ImportBaseView):
         selected_template_id = request.query_params.get("template_id")
         success: str | None = None
         error: str | None = None
+        container = self._admin_ref.app.state.container
         if request.method == "POST":
             form = await request.form()
             try:
                 self._validate_csrf(form, csrf_token)
+                container.require_feature("asset_gallery", task=True)
                 action_name = str(form.get("action", "add"))
                 template_id = UUID(str(form.get("template_id", "")))
                 async with async_session_factory() as session:
@@ -559,5 +888,6 @@ class AssetGalleryView(_ImportBaseView):
                 "assets": assets,
                 "success": success,
                 "error": error,
+                "feature_enabled": container.feature_enabled("asset_gallery", task=True),
             },
         )

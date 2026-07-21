@@ -20,3 +20,7 @@ class ExternalServiceError(RegistryError):
 
 class AuthorizationError(RegistryError):
     pass
+
+
+class FeatureDisabledError(RegistryError):
+    pass

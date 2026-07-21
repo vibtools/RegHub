@@ -33,3 +33,10 @@ GET /api/v1/facets
 
 Template list accepts additive filters `tag`, `language`, `difficulty`, `use_case`, `min_quality`,
 `updated_since`, `sort`, and `order`. Detail and manifest responses support ETag validation.
+
+## v0.2.2 runtime controls and tag fix
+
+The existing v1 response contracts remain unchanged. PostgreSQL tag filtering now uses JSONB
+containment and returns normal catalog responses. Runtime Settings may disable the public API or an
+individual catalog group. Disabled endpoints return a structured HTTP 503 error containing the
+request ID. Health, readiness, and capabilities remain available for diagnosis.

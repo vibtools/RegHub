@@ -7,7 +7,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import RedirectResponse
 
 from app.admin.setup import setup_admin
-from app.api.errors import registry_error_handler
+from app.api.errors import registry_error_handler, unexpected_error_handler
 from app.api.v1.router import router as api_v1_router
 from app.auth.oidc import build_oauth
 from app.auth.routes import router as auth_router
@@ -24,6 +24,7 @@ configure_logging(settings.log_level)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await app.state.container.initialize()
     yield
     await app.state.container.close()
     await engine.dispose()
@@ -31,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RegHub API",
-    version="0.2.1",
+    version="0.2.2",
     description="Smart template registry API for YGIT",
     debug=settings.app_debug,
     lifespan=lifespan,
@@ -62,6 +63,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
 app.add_exception_handler(RegistryError, registry_error_handler)
+app.add_exception_handler(Exception, unexpected_error_handler)
 app.include_router(auth_router)
 app.include_router(api_v1_router)
 setup_admin(app)
