@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3.3 - 2026-07-21
+
+- Added a dedicated Settings AJAX mutation endpoint to eliminate production HTTP 404 responses.
+- Preserved the original Settings POST route as a no-JavaScript fallback.
+- Replaced only the active Settings pane after mutations instead of replacing the full page shell.
+- Kept tabs responsive while a form is saving and added timeout recovery.
+- Synchronized active-tab state, return targets, CSRF values, and inline server feedback.
+
 ## 0.2.3.2 - 2026-07-21
 
 ### Settings continuity and source endpoint hotfix

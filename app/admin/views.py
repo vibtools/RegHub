@@ -979,6 +979,19 @@ class SettingsView(_AdminBaseView):
             },
         )
 
+    @expose("/settings/action", methods=["POST"])
+    async def settings_action(self, request: Request):
+        """Stable AJAX endpoint for every Settings mutation.
+
+        SQLAdmin custom GET/POST view routing can be affected by reverse-proxy
+        method handling when the same URL serves both page rendering and form
+        mutation. Keeping a dedicated POST route avoids that ambiguity while
+        preserving the original POST /settings route as a no-JavaScript
+        fallback. The regular renderer is reused so the browser receives the
+        authoritative, freshly rendered pane and one-time token values.
+        """
+        return await self.settings(request)
+
     @expose("/settings/api-check", methods=["POST"])
     async def api_check(self, request: Request):
         form = await request.form()

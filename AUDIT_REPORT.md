@@ -1,69 +1,60 @@
-# RegHub v0.2.3.2 Settings AJAX & Repository Endpoint Hotfix — Production Audit
+# RegHub v0.2.3.3 Settings Action & UI Responsiveness Hotfix — Master Audit
 
 ## Baseline and zero-freedom compatibility
 
-- Built directly from the live v0.2.3.1 API Settings & Logs Hotfix source archive.
-- No existing endpoint, OIDC route, SQLAdmin view, feature flag, integration, encrypted credential,
-  service token, block rule, operation history, template record, manifest, migration, Docker
-  entrypoint, Coolify variable, or deployment boundary was removed.
-- Existing database revision remains `20260721_0005`; this hotfix requires no migration.
+- Built directly from the live v0.2.3.2 replace-ready archive.
+- Baseline source files removed: **0**.
+- Existing public API routes, administrator pages, OIDC/Keycloak behavior, runtime feature flags,
+  integration records, encrypted credentials, API service tokens, block rules, template records,
+  operation history, Docker entrypoint, Coolify variables, and deployment boundaries are preserved.
+- Database revision remains `20260721_0005`; this hotfix includes no Alembic migration.
 
-## Forensic findings and corrections
+## Production incident finding
 
-### Settings actions and active-section continuity
+The live deployment returned HTTP 404 when Settings mutations were sent to the same mixed GET/POST
+page URL used to render `/admin/settings`. The route is accepted by the local SQLAdmin test stack,
+but the deployed route/proxy combination did not reliably dispatch those asynchronous POST requests.
+The client then retained the form busy state after the failed request, making the Settings interface
+appear frozen.
 
-The v0.2.3.1 server correctly understood `return_tab`, but most Settings actions still used normal
-form navigation. The browser therefore reloaded the full page and client tab activation could race
-against the newly rendered document. Every Settings mutation now uses one delegated asynchronous
-form controller. It submits the exact clicked action, parses the authenticated server response, and
-replaces only the Settings content shell. URL query/hash state, session storage, hidden return
-fields, and server-rendered active classes provide layered fallback so the originating section is
-preserved even when JavaScript is unavailable or a normal reload occurs.
+## Corrections
 
-### Canonical original repository API
+- Added a dedicated authenticated and CSRF-protected `POST /admin/settings/action` route for every
+  Settings mutation.
+- Preserved `POST /admin/settings` as the no-JavaScript fallback.
+- Replaced only the active Settings tab pane after a successful action; the page shell, navigation,
+  and inactive tabs are not rebuilt.
+- Only the clicked submit button is disabled while saving. Other tabs and controls remain usable.
+- Added a bounded 45-second client timeout, safe button restoration, and inline failure feedback.
+- Refreshed server alerts and CSRF values without a full page reload.
+- Synchronized URL hash/query state and every hidden `return_tab` field.
+- Preserved expanded accordion sections and the browser scroll position after a pane refresh.
 
-Added `GET /api/v1/templates/{slug}/repository`. It returns the published template's canonical source
-repository URL, provider adapter, default branch, external repository ID, and latest successful
-source revision. The route is additive, uses the existing Catalog API feature switch and `catalog`
-service-token permission, and appears in Settings → API Manage with the existing asynchronous Check
-and Use controls.
+## Master audit results
 
-### Administrator-facing UI cleanup
-
-Import and Settings pages no longer display implementation commentary, credential-mode notices, or
-instructions about internal operation mechanics. Functional availability warnings, validation
-errors, success states, and security controls remain visible. Operation pages use the production
-label “Operation logs”.
-
-### Operation terminal readability
-
-Completed operations open at their first log entry and running operations continue following the
-latest entry. Start/Latest controls, log counts, formatted structured context, richer sync stages,
-and compact forced row sizing provide a denser terminal view without removing persisted diagnostics.
-
-## Automated verification
-
-- Automated tests: **91 passed**
+- Automated tests: **93 passed**
 - Application statement coverage: **71%**
 - Ruff lint: **PASS**
 - Ruff formatting: **PASS**
 - Python compilation: **PASS**
-- Jinja template compilation: **PASS** (10 templates)
+- Jinja template parse/compile: **PASS** (10 templates)
 - Settings JavaScript syntax (`node --check`): **PASS**
+- Dedicated Settings action route smoke test: **PASS**
+- Original non-JavaScript Settings fallback: **PASS**
 - PostgreSQL table DDL compilation: **PASS** (16 tables)
 - Alembic PostgreSQL offline upgrade through head: **PASS**
-- Package wheel build: **PASS**
-- Re-extracted release test suite: **PASS** (91 passed)
+- Python wheel and source distribution build: **PASS**
 - Dependency integrity (`pip check`): **PASS**
-- Baseline files removed: **0**
+- Secret-pattern and committed `.env` scan: **PASS**
+- Baseline source files removed: **0**
 - New database migration: **none**
 
-One non-blocking Starlette TestClient deprecation warning is emitted by the test dependency. It does
-not represent a production runtime failure.
+One non-blocking Starlette TestClient deprecation warning is emitted by the test dependency. It is
+not a production runtime failure.
 
-## Deployment-time verification still required
+## Remaining deployment-time checks
 
-- Browser AJAX behavior through the live Coolify reverse proxy
-- Settings fallback behavior with JavaScript disabled
+- Browser Settings actions through the live Coolify reverse proxy
 - Keycloak administrator session continuity after redeployment
-- Live service-token checks for the new repository endpoint
+- JavaScript-disabled fallback on the production domain
+- Runtime provider/API credentials against their real external services

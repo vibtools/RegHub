@@ -16,8 +16,8 @@
     </form>
   </div>
 
-  {% if success %}<div class="alert alert-success mb-0" role="status">{{ success }}</div>{% endif %}
-  {% if error %}<div class="alert alert-danger mb-0" role="alert">{{ error }}</div>{% endif %}
+  {% if success %}<div class="alert alert-success mb-0" role="status" data-settings-server-alert>{{ success }}</div>{% endif %}
+  {% if error %}<div class="alert alert-danger mb-0" role="alert" data-settings-server-alert>{{ error }}</div>{% endif %}
 
   {# Runtime secret handling is documented in the administrator guide. #}
   <div class="card">
@@ -483,6 +483,7 @@
       panel.classList.toggle('show', active);
     });
     window.sessionStorage.setItem(storageKey, pane);
+    document.querySelectorAll('input[name="return_tab"]').forEach(field => { field.value = pane; });
     if (updateUrl) {
       const url = new URL(window.location.href);
       url.searchParams.set('tab', pane);
@@ -519,23 +520,82 @@
     toolbar?.insertAdjacentElement('afterend', alert);
   }
 
+  function setFormBusy(form, submitter, busy) {
+    form.toggleAttribute('aria-busy', busy);
+    if (!submitter) return;
+    if (busy) {
+      submitter.dataset.settingsOriginalHtml = submitter.innerHTML;
+      submitter.disabled = true;
+      submitter.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Saving…';
+    } else {
+      submitter.disabled = false;
+      if (submitter.dataset.settingsOriginalHtml) {
+        submitter.innerHTML = submitter.dataset.settingsOriginalHtml;
+        delete submitter.dataset.settingsOriginalHtml;
+      }
+    }
+  }
+
+  function syncServerAlerts(documentCopy) {
+    const shell = document.querySelector('.reghub-page .reghub-section-stack') || document.querySelector('.reghub-section-stack');
+    const nextShell = documentCopy.querySelector('.reghub-page .reghub-section-stack') || documentCopy.querySelector('.reghub-section-stack');
+    if (!shell || !nextShell) return;
+    shell.querySelectorAll('[data-settings-server-alert], [data-settings-client-error]').forEach(item => item.remove());
+    const toolbar = shell.querySelector('.reghub-toolbar');
+    const alerts = Array.from(nextShell.querySelectorAll('[data-settings-server-alert]'));
+    let anchor = toolbar;
+    alerts.forEach(item => {
+      const clone = item.cloneNode(true);
+      anchor?.insertAdjacentElement('afterend', clone);
+      anchor = clone;
+    });
+  }
+
+  function syncCsrf(documentCopy) {
+    const nextToken = documentCopy.querySelector('input[name="csrf_token"]')?.value;
+    if (!nextToken) return;
+    document.querySelectorAll('input[name="csrf_token"]').forEach(field => { field.value = nextToken; });
+  }
+
+  function replacePaneFromDocument(documentCopy, pane, expandedIds = [], scrollTop = 0) {
+    const selector = `#${CSS.escape(pane)}`;
+    const nextPane = documentCopy.querySelector(selector);
+    const current = document.querySelector(selector);
+    if (!nextPane || !current) throw new Error('The updated Settings section could not be loaded.');
+    current.replaceWith(nextPane);
+    expandedIds.forEach(id => {
+      const panel = document.getElementById(id);
+      if (!panel) return;
+      panel.classList.add('show');
+      const trigger = document.querySelector(`[data-bs-target="#${CSS.escape(id)}"]`);
+      trigger?.classList.remove('collapsed');
+      trigger?.setAttribute('aria-expanded', 'true');
+    });
+    syncServerAlerts(documentCopy);
+    syncCsrf(documentCopy);
+    activatePane(pane, true);
+    init();
+    window.requestAnimationFrame(() => window.scrollTo({top: scrollTop, behavior: 'instant'}));
+  }
+
   async function submitSettingsForm(event) {
     if (event.defaultPrevented) return;
     event.preventDefault();
     const form = event.currentTarget;
-    const pane = normalizePane(form.querySelector('[name="return_tab"]')?.value || form.closest('.tab-pane')?.id || currentPane());
-    const submitter = event.submitter;
+    const pane = normalizePane(form.closest('.tab-pane')?.id || currentPane() || form.querySelector('[name="return_tab"]')?.value);
+    const submitter = event.submitter || form.querySelector('button[type="submit"], input[type="submit"]');
     const formData = new FormData(form);
-    if (submitter?.name) formData.set(submitter.name, submitter.value);
+    if (event.submitter?.name) formData.set(event.submitter.name, event.submitter.value);
     formData.set('return_tab', pane);
 
-    const submitButtons = Array.from(form.querySelectorAll('button[type="submit"], input[type="submit"]'));
-    submitButtons.forEach(button => { button.disabled = true; });
-    form.setAttribute('aria-busy', 'true');
+    const expandedIds = Array.from(document.querySelectorAll(`#${CSS.escape(pane)} .collapse.show[id]`)).map(item => item.id);
+    const scrollTop = window.scrollY;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 45000);
+    setFormBusy(form, submitter, true);
 
-    const actionUrl = new URL(form.action || '/admin/settings', window.location.origin);
+    const actionUrl = new URL('/admin/settings/action', window.location.origin);
     actionUrl.searchParams.set('tab', pane);
-    actionUrl.hash = '';
     try {
       const response = await fetch(`${actionUrl.pathname}${actionUrl.search}`, {
         method: 'POST',
@@ -543,20 +603,25 @@
         credentials: 'same-origin',
         headers: {'X-Requested-With': 'RegHub-Settings', Accept: 'text/html'},
         cache: 'no-store',
+        signal: controller.signal,
       });
       const html = await response.text();
-      if (!response.ok) throw new Error(`Settings request failed with HTTP ${response.status}`);
+      if (!response.ok) {
+        const summary = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
+        throw new Error(summary || `Settings request failed with HTTP ${response.status}`);
+      }
       const documentCopy = new DOMParser().parseFromString(html, 'text/html');
-      const nextShell = documentCopy.querySelector('.reghub-page .reghub-section-stack') || documentCopy.querySelector('.reghub-section-stack');
-      const currentShell = document.querySelector('.reghub-page .reghub-section-stack') || document.querySelector('.reghub-section-stack');
-      if (!nextShell || !currentShell) throw new Error('The updated Settings view could not be loaded.');
-      currentShell.replaceWith(nextShell);
-      activatePane(pane, true);
-      init();
+      replacePaneFromDocument(documentCopy, pane, expandedIds, scrollTop);
     } catch (error) {
-      form.removeAttribute('aria-busy');
-      submitButtons.forEach(button => { button.disabled = false; });
-      showClientError(error.message || 'Settings update failed.');
+      setFormBusy(form, submitter, false);
+      if (error?.name === 'AbortError') {
+        showClientError('Settings request timed out. No page reload was performed; retry the action.');
+      } else {
+        showClientError(error.message || 'Settings update failed.');
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      if (document.body.contains(form)) setFormBusy(form, submitter, false);
     }
   }
 

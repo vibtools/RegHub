@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.2.3.2 Settings AJAX & Repository Endpoint Hotfix**
+Current release: **v0.2.3.3 Settings Action & UI Responsiveness Hotfix**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -14,16 +14,15 @@ deploy user projects.
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
 
-## v0.2.3.2 hotfix
+## v0.2.3.3 hotfix
 
-All v0.2.3.1 registry, API access, operation, settings, Keycloak, and database behavior is preserved.
+All v0.2.3.2 registry, API access, operation, settings, Keycloak, and database behavior is preserved.
 
-- Every Settings action is submitted asynchronously and updates the active panel without a full page reload.
-- Server-rendered active-tab state and form return targets preserve the selected Settings section if a normal reload occurs.
-- Added `GET /api/v1/templates/{slug}/repository` for the canonical original repository URL and source identity.
-- Added the repository endpoint to Settings → API Manage with per-row Check and Use controls.
-- Reworked operation-log navigation, compact row spacing, structured detail formatting, and terminal start/latest controls.
-- Removed administrator-facing development commentary from import and settings pages while retaining actionable state, success, warning, and error messages.
+- Added a dedicated Settings mutation route for asynchronous actions.
+- Settings now refreshes only the active tab pane instead of replacing the full page shell.
+- Only the clicked action button enters a busy state; other tabs and controls stay responsive.
+- Added request timeout recovery, inline feedback, CSRF refresh, and current-tab preservation.
+- The original Settings POST route remains available as the non-JavaScript fallback.
 - No database migration is required.
 
 ## v0.2.3.1 hotfix
@@ -119,4 +118,4 @@ GET /api/v1/ready
 5. The entrypoint runs `alembic upgrade head` and `python -m scripts.seed` automatically.
 6. Verify health, readiness, tag filtering, Operations, and Settings.
 
-See `docs/25_V0.2.3.2_HOTFIX.md` and `docs/26_V0.2.3.2_UPGRADE.md`.
+See `docs/27_V0.2.3.3_SETTINGS_ACTION_HOTFIX.md` and `docs/28_V0.2.3.3_UPGRADE.md`.

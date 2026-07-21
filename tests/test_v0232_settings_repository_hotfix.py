@@ -103,7 +103,8 @@ def test_settings_template_intercepts_every_settings_form_and_removes_dev_banner
 
     assert "data-settings-form" in settings
     assert "submitSettingsForm" in settings
-    assert "currentShell.replaceWith(nextShell)" in settings
+    assert "current.replaceWith(nextPane)" in settings
+    assert "currentShell.replaceWith(nextShell)" not in settings
     assert "fetch(`${actionUrl.pathname}${actionUrl.search}`" in settings
     assert "return_tab" in settings
     assert "activatePane" in settings
