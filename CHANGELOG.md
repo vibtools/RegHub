@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.3 - 2026-07-21
+
+### Operations correctness and diagnostics
+
+- Changed duplicate repository import from Failed to Skipped / No change while linking the existing template.
+- Expanded import/sync diagnostics into compact terminal-style provider, analyzer, media, transaction, and exception logs.
+- Added operation search, status/type/order filters, and safe clearing of terminal history.
+- Added template/asset search to Asset Gallery and productive search/filter/sorting across registry administration tables.
+
+### Runtime API management
+
+- Added Development and token-protected Live API modes managed from Settings without redeployment.
+- Added scoped `vt_reg_...` service tokens with one-time display, HMAC-SHA256 storage, expiry, last-used tracking, enable/disable, and deletion.
+- Added runtime IP, CIDR, and hostname block rules with common private-network aliases.
+- Added authenticated in-application API endpoint checks with HTTP status and timing.
+- Added additive migration `20260721_0005_api_access_operations`; no existing data or API path was removed.
+
 ## 0.2.2.1 - 2026-07-21
 
 - Fixed the SQLAdmin custom-page flex shrink regression that broke Settings, Operations, imports, Asset Gallery, and the custom dashboard layout.

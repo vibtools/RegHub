@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.analyzer.service import TemplateAnalyzer
 from app.core.enums import ImportStatus, ScreenshotJobStatus, TemplateStatus
-from app.core.exceptions import ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import DuplicateTemplateError, NotFoundError, ValidationError
 from app.integrations.openai.client import AIMetadataEnricher
 from app.integrations.screenshot.client import ScreenshotService
 from app.models.category import Category
@@ -72,15 +72,38 @@ class TemplateImportService:
         progress: ProgressCallback | None = None,
     ) -> Template:
         repository_url = repository_url.strip()
-        await self._progress(progress, 8, "Validating repository URL")
+        await self._progress(
+            progress, 5, f"$ reghub import --adapter {adapter_name} --repository {repository_url}"
+        )
+        await self._progress(progress, 8, "[1/9] Validating repository URL and provider boundary")
         if not repository_url or len(repository_url) > 500:
             raise ValidationError("Repository URL is required and must not exceed 500 characters")
         history_id = await self._create_history(adapter_name, repository_url, requested_by)
-        await self._progress(progress, 15, "Import history created")
+        await self._progress(progress, 15, f"[2/9] Import audit record created: {history_id}")
         try:
-            await self._progress(progress, 22, f"Fetching metadata from {adapter_name.title()}")
+            await self._progress(
+                progress, 20, f"[3/9] Opening authenticated {adapter_name.title()} API client"
+            )
+            await self._progress(
+                progress, 22, f"GET repository metadata from {adapter_name.title()}", "debug"
+            )
             imported = await self._adapters.get(adapter_name).import_repository(repository_url)
-            await self._progress(progress, 36, "Repository metadata received")
+            await self._progress(progress, 32, f"Repository: {imported.repository_url}", "debug")
+            await self._progress(progress, 33, f"External ID: {imported.external_id}", "debug")
+            revision = imported.source_revision or "unavailable"
+            await self._progress(
+                progress,
+                34,
+                f"Default branch: {imported.default_branch}; revision: {revision}",
+                "debug",
+            )
+            discovery_summary = (
+                f"Root entries: {len(imported.root_files)}; "
+                f"topics: {len(imported.topics)}; "
+                f"screenshots discovered: {len(imported.screenshot_urls)}"
+            )
+            await self._progress(progress, 35, discovery_summary, "debug")
+            await self._progress(progress, 36, "[4/9] Repository metadata received successfully")
             template = await self.import_imported_repository(
                 imported=imported,
                 requested_by=requested_by,
@@ -90,6 +113,8 @@ class TemplateImportService:
                 progress=progress,
             )
             return template
+        except DuplicateTemplateError:
+            raise
         except Exception as exc:
             await self._mark_failed(history_id, str(exc))
             raise
@@ -109,8 +134,29 @@ class TemplateImportService:
                 imported.adapter, imported.repository_url, requested_by
             )
         try:
-            await self._progress(progress, 42, "Analyzing repository files and package metadata")
+            await self._progress(
+                progress, 42, "[5/9] Analyzing repository files, manifests and package metadata"
+            )
             analysis = self._analyzer.analyze(imported)
+            package_manager = analysis.package_manager or "unknown"
+            language = analysis.language or imported.primary_language or "unknown"
+            await self._progress(
+                progress,
+                48,
+                f"package_manager={package_manager} language={language}",
+                "debug",
+            )
+            framework_version = analysis.framework_version or "unknown"
+            confidence = analysis.evidence.get("confidence", "unknown")
+            await self._progress(
+                progress,
+                50,
+                (
+                    f"framework={analysis.framework_slug} "
+                    f"version={framework_version} confidence={confidence}"
+                ),
+                "debug",
+            )
             await self._progress(progress, 52, f"Framework detected: {analysis.framework_name}")
             if self._ai_enricher and self._ai_enricher.enabled:
                 await self._progress(progress, 56, "Running optional AI metadata enrichment")
@@ -121,10 +167,13 @@ class TemplateImportService:
                     progress,
                     60,
                     "AI metadata enrichment is disabled; deterministic metadata retained",
+                    "debug",
                 )
             async with self._session_factory() as session:
                 await self._progress(
-                    progress, 64, "Checking duplicates and resolving registry resources"
+                    progress,
+                    64,
+                    "[6/9] Checking duplicates and resolving category/provider/framework",
                 )
                 duplicate = await session.scalar(
                     select(Template).where(
@@ -135,7 +184,23 @@ class TemplateImportService:
                     )
                 )
                 if duplicate:
-                    raise ConflictError("This repository already exists in RegHub")
+                    duplicate_message = (
+                        f"Repository already registered as template "
+                        f"'{duplicate.name}' ({duplicate.slug})"
+                    )
+                    await self._progress(
+                        progress,
+                        68,
+                        duplicate_message,
+                        "notice",
+                    )
+                    await self._mark_duplicate(history_id, duplicate)
+                    raise DuplicateTemplateError(
+                        "This repository is already registered in RegHub",
+                        template_id=duplicate.id,
+                        template_slug=duplicate.slug,
+                        template_name=duplicate.name,
+                    )
 
                 category = await self._resolve_category(
                     session, category_id, analysis.category_slug
@@ -143,7 +208,13 @@ class TemplateImportService:
                 provider = await self._resolve_provider(session, provider_id, imported)
                 framework = await FrameworkService.resolve(session, analysis.framework_slug)
                 unique_slug = await self._unique_slug(session, analysis.title or imported.name)
-                await self._progress(progress, 72, "Building Manifest v2 and media metadata")
+                category_slug = category.slug if category else "none"
+                provider_slug = provider.slug if provider else "none"
+                resolved_resources = (
+                    f"category={category_slug} provider={provider_slug} framework={framework.slug}"
+                )
+                await self._progress(progress, 69, resolved_resources, "debug")
+                await self._progress(progress, 72, "[7/9] Building Manifest v2 and media metadata")
                 manifest = build_manifest(
                     framework_slug=framework.slug,
                     repository_url=imported.repository_url,
@@ -207,7 +278,9 @@ class TemplateImportService:
                     framework=framework,
                 )
                 await self._progress(
-                    progress, 82, "Persisting template, version, history and assets"
+                    progress,
+                    82,
+                    "[8/9] BEGIN database transaction: template + version + sync history + assets",
                 )
                 session.add(template)
                 await session.flush()
@@ -269,8 +342,13 @@ class TemplateImportService:
                 history.completed_at = now
                 await session.commit()
                 await session.refresh(template)
-                await self._progress(progress, 94, "Template import transaction committed")
+                await self._progress(
+                    progress, 92, f"COMMIT database transaction; template_id={template.id}", "debug"
+                )
+                await self._progress(progress, 94, "[9/9] Template import transaction committed")
                 return template
+        except DuplicateTemplateError:
+            raise
         except Exception as exc:
             await self._mark_failed(history_id, str(exc))
             raise
@@ -286,6 +364,22 @@ class TemplateImportService:
             session.add(history)
             await session.commit()
             return history.id
+
+    async def _mark_duplicate(self, history_id: UUID, template: Template) -> None:
+        async with self._session_factory() as session:
+            history = await session.get(ImportHistory, history_id)
+            if history:
+                history.status = ImportStatus.SUCCEEDED
+                history.template_id = template.id
+                history.error_message = None
+                history.metadata_snapshot = {
+                    "outcome": "already_exists",
+                    "template_id": str(template.id),
+                    "template_slug": template.slug,
+                    "template_name": template.name,
+                }
+                history.completed_at = datetime.now(UTC)
+                await session.commit()
 
     async def _mark_failed(self, history_id: UUID, message: str) -> None:
         async with self._session_factory() as session:

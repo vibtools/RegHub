@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.2.2.1 UI & Operations Hotfix**
+Current release: **v0.2.3 Operations & API Access**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -14,25 +14,18 @@ deploy user projects.
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
 
-## v0.2.2 features
+## v0.2.3 features
 
-All v0.2.1 registry, provider, media, API, Keycloak, and database behavior is preserved.
+All v0.2.2.1 registry, provider, media, API, Keycloak, runtime-settings, and database behavior is preserved.
 
-- Fixed PostgreSQL JSONB tag filtering (`?tag=astro`).
-- Added persistent administrator operations with status, progress, logs, result, and errors.
-- Added a Coolify-style Operations Console with live SSE logs, copy, TXT export, retry, cancel,
-  and context-preserving return links.
-- GitHub/GitLab/Bitbucket/local imports, source sync, publication actions, thumbnail generation,
-  and screenshot retries now open an operation progress page instead of silently returning to a
-  list page.
-- Added runtime Settings for project feature ON/OFF controls and administrator task permissions.
-- Added runtime GitHub, GitLab, Bitbucket, AI, screenshot, and custom third-party API configuration.
-- Runtime credentials are encrypted before database storage and never rendered back to the UI.
-- Runtime settings are applied immediately without a Coolify redeploy. Existing environment values
-  remain optional bootstrap/fallback values.
-- Added runtime control for the RegHub public API and its catalog, assets, freshness, facets, and
-  change-feed sections. Health, readiness, authentication, and Settings remain available.
-- Added structured expected/unexpected API errors with request IDs.
+- Duplicate imports finish as **Skipped / No change** and link the existing template.
+- Import and sync operations show compact developer-oriented terminal diagnostics.
+- Operations Console supports search, filtering, ordering, and safe terminal-history clearing.
+- Asset Gallery supports template search and asset filtering.
+- Registry administration tables include productive search, filters, and date/name sorting.
+- Settings includes **API Manage** with Development/Live mode, scoped service tokens, client block rules, and endpoint checks.
+- Raw `vt_reg_...` service tokens are shown once and only keyed digests are stored.
+- Live Mode protects registry data endpoints while health and readiness remain public.
 
 ## Operations Console
 
@@ -43,7 +36,7 @@ All v0.2.1 registry, provider, media, API, Keycloak, and database behavior is pr
 Long-running administrator tasks use persistent states:
 
 ```text
-queued -> running -> succeeded | failed | cancelled
+queued -> running -> succeeded | skipped | failed | cancelled
 ```
 
 A running operation displays progress and debug logs. Logs remain available after completion and
@@ -65,6 +58,9 @@ The Settings page manages:
 - AI and screenshot integration state
 - Custom third-party API configurations
 - Environment fallback behavior
+- Development/Live API mode
+- Scoped service tokens and IP/CIDR/hostname block rules
+- Live API endpoint checks
 
 Runtime secrets are encrypted with a key derived from `SESSION_SECRET`. Keep `SESSION_SECRET`
 unchanged across deployments or previously stored runtime credentials cannot be decrypted.
@@ -106,4 +102,4 @@ GET /api/v1/ready
 5. The entrypoint runs `alembic upgrade head` and `python -m scripts.seed` automatically.
 6. Verify health, readiness, tag filtering, Operations, and Settings.
 
-See `docs/17_V0.2.2_UPGRADE.md` and `docs/18_V0.2.2_OPERATIONS_SETTINGS.md`.
+See `docs/21_V0.2.3_OPERATIONS_API_ACCESS.md` and `docs/22_V0.2.3_UPGRADE.md`.

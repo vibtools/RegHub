@@ -41,7 +41,9 @@
             <button id="refreshOperation" type="button" class="btn btn-sm btn-ghost-secondary">Refresh now</button>
           </div>
           <div id="errorBox" class="alert alert-danger mt-3 {% if not operation.error_message %}d-none{% endif %}" role="alert">{{ operation.error_message or '' }}</div>
-          <div id="resultBox" class="alert alert-success mt-3 {% if operation.status.value != 'succeeded' %}d-none{% endif %}" role="status">Operation completed successfully.</div>
+          <div id="resultBox" class="alert alert-success mt-3 {% if operation.status.value not in ['succeeded','skipped'] %}d-none{% endif %}" role="status">
+            {% if operation.status.value == 'skipped' %}No change was required. The repository is already registered.{% else %}Operation completed successfully.{% endif %}
+          </div>
           <noscript><div class="alert alert-warning mt-3 mb-0">JavaScript is disabled. Use “Refresh now” in your browser to see updated progress.</div></noscript>
         </div>
       </div>
@@ -60,7 +62,7 @@
         <div class="card-body">
           <div id="logOutput" class="reghub-log-panel" role="log" aria-live="polite" aria-label="Operation debug logs">
             {% for item in operation.logs %}
-            <div class="reghub-log-line" data-sequence="{{ item.sequence }}" data-level="{{ item.level }}">{{ item.created_at.isoformat() }} [{{ item.level|upper }}] {{ item.message }}</div>
+            <div class="reghub-log-line" data-sequence="{{ item.sequence }}" data-level="{{ item.level }}"><span class="reghub-log-time">{{ item.created_at.strftime('%H:%M:%S.%f')[:-3] }}</span><span class="reghub-log-level">{{ item.level|upper }}</span><span class="reghub-log-message">{{ item.message }}</span>{% if item.data %}<span class="reghub-log-data">{{ item.data | tojson }}</span>{% endif %}</div>
             {% else %}
             <div id="emptyLogMessage" class="text-secondary">No logs have been recorded yet. Waiting for the operation runner…</div>
             {% endfor %}
@@ -126,7 +128,7 @@
   const retryForm = document.getElementById('retryForm');
   const refreshButton = document.getElementById('refreshOperation');
   const copyButton = document.getElementById('copyLogs');
-  const terminal = new Set(['succeeded', 'failed', 'cancelled']);
+  const terminal = new Set(['succeeded', 'failed', 'cancelled', 'skipped']);
 
   let lastSequence = 0;
   let eventSource = null;
@@ -163,7 +165,7 @@
     progressBar.style.width = `${progress}%`;
     progressBar.setAttribute('aria-valuenow', String(progress));
     badge.textContent = value;
-    badge.className = `badge bg-${value === 'succeeded' ? 'green' : value === 'failed' ? 'red' : value === 'running' ? 'yellow' : value === 'cancelled' ? 'secondary' : 'blue'}-lt`;
+    badge.className = `badge bg-${value === 'succeeded' ? 'green' : value === 'skipped' ? 'azure' : value === 'failed' ? 'red' : value === 'running' ? 'yellow' : value === 'cancelled' ? 'secondary' : 'blue'}-lt`;
     badge.classList.toggle('reghub-pulse', value === 'running' || value === 'queued');
 
     if (data.error) {
@@ -173,7 +175,8 @@
       errorBox.classList.add('d-none');
     }
 
-    if (value === 'succeeded') {
+    if (value === 'succeeded' || value === 'skipped') {
+      resultBox.textContent = value === 'skipped' ? 'No change was required. The repository is already registered.' : 'Operation completed successfully.';
       resultBox.classList.remove('d-none');
     }
 
@@ -189,7 +192,7 @@
     if (terminal.has(value)) {
       cancelForm.classList.add('d-none');
       retryForm.classList.toggle('d-none', !['failed', 'cancelled'].includes(value));
-      setConnection('complete', value === 'succeeded' ? 'green' : value === 'failed' ? 'red' : 'secondary');
+      setConnection('complete', value === 'succeeded' ? 'green' : value === 'skipped' ? 'azure' : value === 'failed' ? 'red' : 'secondary');
       stopLiveUpdates();
     }
     markUpdated();
@@ -205,7 +208,13 @@
     line.className = 'reghub-log-line';
     line.dataset.sequence = String(sequence || lastSequence);
     line.dataset.level = data.level || 'info';
-    line.textContent = `${data.created_at || ''} [${String(data.level || 'info').toUpperCase()}] ${data.message || ''}`;
+    const created = data.created_at ? new Date(data.created_at).toLocaleTimeString([], {hour12:false, fractionalSecondDigits:3}) : '--:--:--';
+    const detail = data.data ? ` ${JSON.stringify(data.data)}` : '';
+    line.innerHTML = `<span class="reghub-log-time"></span><span class="reghub-log-level"></span><span class="reghub-log-message"></span><span class="reghub-log-data"></span>`;
+    line.querySelector('.reghub-log-time').textContent = created;
+    line.querySelector('.reghub-log-level').textContent = String(data.level || 'info').toUpperCase();
+    line.querySelector('.reghub-log-message').textContent = data.message || '';
+    line.querySelector('.reghub-log-data').textContent = detail;
     output.appendChild(line);
     output.scrollTop = output.scrollHeight;
   }

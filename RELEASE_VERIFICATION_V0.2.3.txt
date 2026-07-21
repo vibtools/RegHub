@@ -1,0 +1,35 @@
+RegHub v0.2.3 Release Verification
+Baseline: v0.2.2.1 UI & Operations Hotfix
+Date: 2026-07-21
+
+Automated tests:                 PASS — 85 passed
+Application statement coverage: 69%
+Ruff lint:                       PASS
+Ruff formatting:                 PASS — 112 files formatted
+Python compilation:              PASS
+Jinja template compilation:      PASS — 10 templates
+SQLAlchemy PostgreSQL DDL:        PASS — 16 tables
+Alembic offline upgrade:         PASS — through 20260721_0005
+Full FastAPI lifespan smoke:      PASS
+Development API access:           PASS
+Live token-required API access:   PASS
+Token scope enforcement:          PASS
+Token one-way digest storage:     PASS
+IP/CIDR/hostname blocking:        PASS
+Duplicate import no-change:       PASS — skipped, not failed
+Operation terminal clear safety:  PASS
+Package wheel/sdist build:        PASS
+Replace-ready ZIP re-extract:      PASS — 85 passed
+Dependency integrity:             PASS
+Secret-pattern scan:              PASS
+Baseline files removed:           PASS — 0 removed
+
+One Starlette TestClient deprecation warning is emitted by the test dependency. It does not
+represent a production runtime error.
+
+Deployment-time verification still required:
+- Real Coolify image build/start and PostgreSQL migration
+- Keycloak login/logout after deployment
+- Reverse-proxy client IP header sanitization
+- Live YGIT service-token consumption
+- Live GitHub/GitLab/Bitbucket provider requests

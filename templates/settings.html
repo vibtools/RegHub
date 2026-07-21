@@ -24,7 +24,7 @@
 
   <div class="card">
     <div class="card-header pb-0">
-      <ul class="nav nav-tabs card-header-tabs" id="settingsTabs" role="tablist">
+      <ul class="nav nav-pills reghub-settings-tabs w-100" id="settingsTabs" role="tablist">
         <li class="nav-item" role="presentation">
           <button class="nav-link active" id="features-tab" data-bs-toggle="tab" data-bs-target="#features-pane" type="button" role="tab" aria-controls="features-pane" aria-selected="true">
             <i class="fa-solid fa-toggle-on me-1"></i>Feature controls
@@ -33,6 +33,11 @@
         <li class="nav-item" role="presentation">
           <button class="nav-link" id="integrations-tab" data-bs-toggle="tab" data-bs-target="#integrations-pane" type="button" role="tab" aria-controls="integrations-pane" aria-selected="false">
             <i class="fa-solid fa-plug me-1"></i>Integrations
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="api-manage-tab" data-bs-toggle="tab" data-bs-target="#api-manage-pane" type="button" role="tab" aria-controls="api-manage-pane" aria-selected="false">
+            <i class="fa-solid fa-shield-halved me-1"></i>API Manage
           </button>
         </li>
         <li class="nav-item" role="presentation">
@@ -236,6 +241,136 @@
         </div>
       </div>
 
+
+      <div class="tab-pane fade" id="api-manage-pane" role="tabpanel" aria-labelledby="api-manage-tab" tabindex="0">
+        <div class="card-body reghub-section-stack">
+          <div class="reghub-toolbar">
+            <div>
+              <h3 class="card-title mb-1">RegHub API access control</h3>
+              <div class="text-secondary">Switch between open development access and token-protected live access without redeploying.</div>
+            </div>
+            <span class="badge bg-{{ 'red' if api_mode == 'live' else 'blue' }}-lt fs-6">{{ api_mode|upper }} MODE</span>
+          </div>
+
+          {% if new_api_token %}
+          <div class="alert alert-success">
+            <strong>Copy this token now.</strong> It is shown once and only its hash is stored.
+            <div class="input-group mt-2">
+              <input id="newApiToken" class="form-control font-monospace" value="{{ new_api_token }}" readonly>
+              <button id="copyApiToken" class="btn btn-success" type="button">Copy token</button>
+            </div>
+          </div>
+          {% endif %}
+
+          <div class="row row-cards">
+            <div class="col-xl-5">
+              <div class="card h-100">
+                <div class="card-header"><h3 class="card-title">API mode</h3></div>
+                <div class="card-body">
+                  <form method="post">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="form-selectgroup form-selectgroup-boxes d-flex flex-column">
+                      <label class="form-selectgroup-item flex-fill">
+                        <input type="radio" name="api_mode" value="development" class="form-selectgroup-input" {% if api_mode == 'development' %}checked{% endif %}>
+                        <div class="form-selectgroup-label d-flex align-items-center p-3"><div class="me-3"><span class="form-selectgroup-check"></span></div><div><strong>Development Mode</strong><div class="text-secondary small">Registry endpoints are publicly readable for testing.</div></div></div>
+                      </label>
+                      <label class="form-selectgroup-item flex-fill">
+                        <input type="radio" name="api_mode" value="live" class="form-selectgroup-input" {% if api_mode == 'live' %}checked{% endif %}>
+                        <div class="form-selectgroup-label d-flex align-items-center p-3"><div class="me-3"><span class="form-selectgroup-check"></span></div><div><strong>Live Mode</strong><div class="text-secondary small">Every registry endpoint requires a valid <code>vt_reg_...</code> service token. Health and readiness stay public.</div></div></div>
+                      </label>
+                    </div>
+                    <button class="btn btn-primary w-100 mt-3" name="action" value="save_api_mode" type="submit">Apply API mode</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div class="col-xl-7">
+              <div class="card h-100">
+                <div class="card-header"><h3 class="card-title">Live endpoint check</h3></div>
+                <div class="card-body">
+                  <p class="text-secondary">Runs authenticated checks against the active application routes using a temporary internal check token.</p>
+                  <button id="runApiCheck" class="btn btn-outline-primary" type="button"><i class="fa-solid fa-vial-circle-check me-1"></i>Check API endpoints</button>
+                  <div id="apiCheckStatus" class="small text-secondary mt-2"></div>
+                  <div id="apiCheckResults" class="table-responsive mt-3 d-none">
+                    <table class="table table-sm table-vcenter"><thead><tr><th>Endpoint</th><th>HTTP</th><th>Time</th><th>Result</th></tr></thead><tbody></tbody></table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3 class="card-title">Service tokens</h3></div>
+            <div class="card-body border-bottom">
+              <form method="post" class="row g-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="col-md-5"><label class="form-label">Token name</label><input class="form-control" name="token_name" placeholder="YGIT production" required maxlength="160"></div>
+                <div class="col-md-4"><label class="form-label">Expires at (optional)</label><input class="form-control" type="datetime-local" name="expires_at"></div>
+                <div class="col-md-3"><label class="form-label">Description</label><input class="form-control" name="description" maxlength="1000" placeholder="Server-to-server access"></div>
+                <div class="col-12">
+                  <label class="form-label">Endpoint permissions</label>
+                  <div class="row g-2">
+                    {% for scope, description in api_scopes %}
+                    <div class="col-md-6 col-xl-4"><label class="form-check border rounded p-2 ps-5 h-100"><input class="form-check-input" type="checkbox" name="scopes" value="{{ scope }}" checked><span class="form-check-label"><strong>{{ scope }}</strong><span class="d-block text-secondary small">{{ description }}</span></span></label></div>
+                    {% endfor %}
+                  </div>
+                </div>
+                <div class="col-12 text-end"><button class="btn btn-primary" name="action" value="create_api_token" type="submit"><i class="fa-solid fa-key me-1"></i>Create service token</button></div>
+              </form>
+            </div>
+            <div class="table-responsive">
+              <table class="table table-vcenter card-table">
+                <thead><tr><th>Name</th><th>Token identifier</th><th>Permissions</th><th>State</th><th>Last used</th><th>Expires</th><th></th></tr></thead>
+                <tbody>
+                  {% for token in api_tokens %}
+                  <tr>
+                    <td><strong>{{ token.name }}</strong><div class="text-secondary small">{{ token.description or '' }}</div></td>
+                    <td><code>{{ token.token_prefix }}…{{ token.last_four }}</code></td>
+                    <td class="reghub-wrap">{{ (token.scopes or [])|join(', ') }}</td>
+                    <td><span class="badge bg-{{ 'green' if token.enabled else 'secondary' }}-lt">{{ 'Enabled' if token.enabled else 'Disabled' }}</span></td>
+                    <td>{{ token.last_used_at or 'Never' }}</td><td>{{ token.expires_at or 'Never' }}</td>
+                    <td><div class="btn-list flex-nowrap">
+                      <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="token_id" value="{{ token.id }}"><input type="hidden" name="enabled" value="{{ '0' if token.enabled else '1' }}"><button class="btn btn-sm btn-outline-{{ 'warning' if token.enabled else 'success' }}" name="action" value="toggle_api_token" type="submit">{{ 'Disable' if token.enabled else 'Enable' }}</button></form>
+                      <form method="post" onsubmit="return confirm('Delete this service token permanently?')"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="token_id" value="{{ token.id }}"><button class="btn btn-sm btn-outline-danger" name="action" value="delete_api_token" type="submit">Delete</button></form>
+                    </div></td>
+                  </tr>
+                  {% else %}<tr><td colspan="7" class="text-center text-secondary py-4">No service tokens yet. Create one before enabling Live Mode.</td></tr>{% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header"><h3 class="card-title">Blocked clients and hosts</h3></div>
+            <div class="card-body border-bottom">
+              <form method="post" class="row g-2 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <div class="col-md-5"><label class="form-label">IP, CIDR or hostname</label><input class="form-control" name="block_value" list="apiBlockPresets" required placeholder="203.0.113.10, 10.0.0.0/8, metadata.google"><datalist id="apiBlockPresets"><option value="localhost"><option value="127.0.0.0/8"><option value="10.0.0.0/8"><option value="172.16.0.0/12"><option value="192.168.0.0/16"><option value="169.254.0.0/16"><option value="169.254.169.254"><option value="metadata.google"></datalist></div>
+                <div class="col-md-5"><label class="form-label">Note</label><input class="form-control" name="note" maxlength="500" placeholder="Reason for blocking"></div>
+                <div class="col-md-2 d-grid"><button class="btn btn-danger" name="action" value="add_block_rule" type="submit">Add block rule</button></div>
+              </form>
+              <div class="form-hint mt-2">IP/CIDR rules match the forwarded client address. Hostname rules match the requested host. Wildcard shortcuts such as <code>10.x.x.x</code> are normalized to safe CIDR ranges. Avoid blocking your own public administrator address. Private/reserved outbound integration URLs remain blocked separately by RegHub SSRF protection.</div>
+            </div>
+            <div class="table-responsive"><table class="table table-vcenter card-table"><thead><tr><th>Rule</th><th>Type</th><th>State</th><th>Note</th><th></th></tr></thead><tbody>
+              {% for rule in api_block_rules %}
+              <tr>
+                <td colspan="5">
+                  <form method="post" class="row g-2 align-items-center">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="rule_id" value="{{ rule.id }}">
+                    <div class="col-lg-3"><input class="form-control form-control-sm font-monospace" name="block_value" value="{{ rule.value }}" required></div>
+                    <div class="col-lg-1"><span class="badge bg-secondary-lt">{{ rule.rule_type }}</span></div>
+                    <div class="col-lg-2"><select class="form-select form-select-sm" name="enabled"><option value="1" {% if rule.enabled %}selected{% endif %}>Blocked</option><option value="0" {% if not rule.enabled %}selected{% endif %}>Disabled</option></select></div>
+                    <div class="col-lg-4"><input class="form-control form-control-sm" name="note" value="{{ rule.note or '' }}" maxlength="500" placeholder="Note"></div>
+                    <div class="col-lg-2"><div class="btn-list flex-nowrap"><button class="btn btn-sm btn-primary" name="action" value="update_block_rule" type="submit">Save</button><button class="btn btn-sm btn-outline-danger" name="action" value="delete_block_rule" type="submit" onclick="return confirm('Delete this block rule?')">Delete</button></div></div>
+                  </form>
+                </td>
+              </tr>
+              {% else %}<tr><td colspan="5" class="text-center text-secondary py-4">No API block rules configured.</td></tr>{% endfor %}
+            </tbody></table></div>
+          </div>
+        </div>
+      </div>
+
       <div class="tab-pane fade" id="custom-api-pane" role="tabpanel" aria-labelledby="custom-api-tab" tabindex="0">
         <div class="card-body">
           <div class="reghub-content-narrow">
@@ -287,6 +422,46 @@
       window.sessionStorage.setItem(storageKey, target);
       history.replaceState(null, '', target);
     });
+  });
+
+  const copyToken = document.getElementById('copyApiToken');
+  if (copyToken) copyToken.addEventListener('click', async () => {
+    const value = document.getElementById('newApiToken').value;
+    await navigator.clipboard.writeText(value);
+    copyToken.textContent = 'Copied';
+  });
+
+  const checkButton = document.getElementById('runApiCheck');
+  if (checkButton) checkButton.addEventListener('click', async () => {
+    const status = document.getElementById('apiCheckStatus');
+    const wrapper = document.getElementById('apiCheckResults');
+    const body = wrapper.querySelector('tbody');
+    checkButton.disabled = true;
+    status.textContent = 'Running live route checks…';
+    body.innerHTML = '';
+    try {
+      const form = new FormData();
+      form.append('csrf_token', {{ csrf_token|tojson }});
+      const response = await fetch('/admin/settings/api-check', {method:'POST', body:form, credentials:'same-origin', headers:{Accept:'application/json'}});
+      const payload = await response.json();
+      (payload.results || []).forEach(item => {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td><code></code></td><td><span class="badge"></span></td><td></td><td></td>`;
+        row.querySelector('code').textContent = item.path;
+        const badge = row.querySelector('.badge');
+        badge.textContent = item.status || 'ERR';
+        badge.className = `badge bg-${item.ok ? 'green' : 'red'}-lt`;
+        row.children[2].textContent = `${item.duration_ms} ms`;
+        row.children[3].textContent = item.ok ? 'PASS' : String(item.body || '').slice(0, 160);
+        body.appendChild(row);
+      });
+      wrapper.classList.remove('d-none');
+      status.textContent = `Completed in ${payload.mode} mode.`;
+    } catch (error) {
+      status.textContent = `API check failed: ${error.message}`;
+    } finally {
+      checkButton.disabled = false;
+    }
   });
 })();
 </script>

@@ -100,6 +100,8 @@ class CapabilitiesRead(BaseModel):
     freshness_api_enabled: bool = False
     operations_console_enabled: bool = False
     public_api_enabled: bool = True
+    api_access_mode: str = "development"
+    service_token_required: bool = False
 
 
 class TemplateAssetRead(BaseModel):

@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RegHub API",
-    version="0.2.2.1",
+    version="0.2.3",
     description="Smart template registry API for YGIT",
     debug=settings.app_debug,
     lifespan=lifespan,
@@ -57,7 +57,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=False,
     allow_methods=["GET"],
-    allow_headers=["Accept", "Content-Type", "X-Request-ID"],
+    allow_headers=["Accept", "Content-Type", "X-Request-ID", "Authorization", "X-RegHub-Token"],
 )
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIdMiddleware)

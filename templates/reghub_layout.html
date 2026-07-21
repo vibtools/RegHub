@@ -140,14 +140,58 @@
     overflow-wrap: anywhere;
   }
 
-  .reghub-log-line {
-    display: block;
-    margin: 0 0 .25rem;
+  .reghub-log-panel {
+    padding: .75rem .85rem;
+    line-height: 1.35;
   }
 
-  .reghub-log-line[data-level="error"] { color: #ff9b9b; }
-  .reghub-log-line[data-level="warning"] { color: #ffd479; }
-  .reghub-log-line[data-level="debug"] { color: #9fb2d9; }
+  .reghub-log-line {
+    display: grid;
+    grid-template-columns: 92px 72px minmax(0, 1fr);
+    column-gap: .55rem;
+    align-items: start;
+    margin: 0;
+    padding: .12rem 0;
+    border-bottom: 1px solid rgba(255,255,255,.035);
+  }
+
+  .reghub-log-time { color: #8190b7; white-space: nowrap; }
+  .reghub-log-level { color: #8fd3ff; font-weight: 700; white-space: nowrap; }
+  .reghub-log-message { min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .reghub-log-data { grid-column: 3; color: #91a3cf; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .reghub-log-line[data-level="error"] .reghub-log-level,
+  .reghub-log-line[data-level="error"] .reghub-log-message { color: #ff9b9b; }
+  .reghub-log-line[data-level="warning"] .reghub-log-level,
+  .reghub-log-line[data-level="warning"] .reghub-log-message { color: #ffd479; }
+  .reghub-log-line[data-level="notice"] .reghub-log-level,
+  .reghub-log-line[data-level="notice"] .reghub-log-message { color: #74d6ff; }
+  .reghub-log-line[data-level="debug"] .reghub-log-level,
+  .reghub-log-line[data-level="debug"] .reghub-log-message { color: #9fb2d9; }
+
+
+  .reghub-settings-tabs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: .5rem;
+    padding: .5rem 0;
+  }
+
+  .reghub-settings-tabs .nav-item { min-width: 0; }
+  .reghub-settings-tabs .nav-link {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid var(--reghub-panel-border);
+    border-radius: .5rem;
+    font-weight: 600;
+    color: var(--tblr-body-color, #1d273b);
+    background: var(--tblr-bg-surface, #fff);
+  }
+  .reghub-settings-tabs .nav-link:hover { border-color: var(--tblr-primary, #206bc4); }
+  .reghub-settings-tabs .nav-link.active {
+    color: #fff;
+    background: var(--tblr-primary, #206bc4);
+    border-color: var(--tblr-primary, #206bc4);
+  }
 
   .reghub-json-editor {
     min-height: 8.5rem;
@@ -193,6 +237,11 @@
     .reghub-log-panel {
       min-height: 260px;
       max-height: 55vh;
+    }
+    .reghub-log-line {
+      grid-template-columns: 76px 62px minmax(0, 1fr);
+      column-gap: .35rem;
+      font-size: .75rem;
     }
 
     .reghub-sticky-actions {

@@ -14,6 +14,7 @@ from app.registry.adapters.gitlab import GitLabRegistryAdapter
 from app.registry.adapters.registry import AdapterRegistry
 from app.registry.media import ScreenshotJobService
 from app.registry.template import TemplateImportService, TemplateSyncService
+from app.runtime.api_access import ApiAccessService
 from app.runtime.settings import RuntimeSettingsService
 
 
@@ -22,6 +23,9 @@ class ApplicationContainer:
         self.settings = settings
         self.session_factory = async_session_factory
         self.runtime_settings = RuntimeSettingsService(async_session_factory, settings)
+        self.api_access = ApiAccessService(
+            async_session_factory, settings.session_secret.get_secret_value()
+        )
         self.operation_service = OperationService(async_session_factory)
         self.operation_runner = OperationRunner(self.operation_service)
         self.operation_runner.bind(self)
@@ -45,6 +49,7 @@ class ApplicationContainer:
 
     async def initialize(self) -> None:
         await self.runtime_settings.initialize()
+        await self.api_access.initialize()
         await self.reload_runtime()
         await self.operation_runner.initialize()
 

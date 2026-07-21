@@ -29,3 +29,19 @@
 - Runtime feature and integration updates apply without redeploy.
 - Runtime secrets are encrypted and never rendered.
 - Public API feature OFF returns structured HTTP 503 while health/readiness remain available.
+
+## v0.2.3 operations and API-access checks
+
+- Duplicate repository import completes as Skipped / No change and links the existing template.
+- Import History records the duplicate request as succeeded with `outcome=already_exists`.
+- Import/sync operation logs include adapter, metadata, analyzer, resource, transaction, and safe
+  exception details without credentials.
+- Operations search/filter/order and terminal-history clearing work; queued/running records survive.
+- Asset Gallery template search and asset filters work with large catalogs.
+- Template and registry administration tables sort and filter without SQLAdmin errors.
+- A service token is shown once and only its keyed digest is stored.
+- Live Mode rejects unauthenticated registry requests and accepts permitted token scopes.
+- Development Mode remains publicly readable while block rules still apply.
+- IP/CIDR/hostname block rules can be added, edited, disabled, and deleted.
+- API endpoint check reports health, readiness, catalog, capabilities, and resource status.
+- Health/readiness and administrator recovery surfaces remain reachable.

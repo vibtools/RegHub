@@ -5,12 +5,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
 from app.core.enums import OperationStatus, TemplateStatus
-from app.core.exceptions import NotFoundError, ValidationError
+from app.core.exceptions import DuplicateTemplateError, NotFoundError, ValidationError
 from app.models.admin_operation import AdminOperation, OperationLog
 from app.registry.local import repository_from_manifest, repository_from_zip
 from app.registry.template import TemplateService
@@ -19,7 +19,12 @@ if TYPE_CHECKING:
     from app.container import ApplicationContainer
 
 logger = logging.getLogger(__name__)
-_TERMINAL = {OperationStatus.SUCCEEDED, OperationStatus.FAILED, OperationStatus.CANCELLED}
+_TERMINAL = {
+    OperationStatus.SUCCEEDED,
+    OperationStatus.FAILED,
+    OperationStatus.CANCELLED,
+    OperationStatus.SKIPPED,
+}
 
 
 class OperationService:
@@ -73,17 +78,69 @@ class OperationService:
                 raise NotFoundError("Operation not found")
             return operation
 
-    async def list_recent(self, limit: int = 100) -> list[AdminOperation]:
+    async def list_recent(
+        self,
+        limit: int = 100,
+        *,
+        search: str | None = None,
+        status: str | None = None,
+        operation_type: str | None = None,
+        order: str = "desc",
+    ) -> list[AdminOperation]:
+        query = select(AdminOperation)
+        if search and search.strip():
+            term = f"%{search.strip()}%"
+            query = query.where(
+                or_(
+                    AdminOperation.title.ilike(term),
+                    AdminOperation.operation_type.ilike(term),
+                    cast(AdminOperation.id, String).ilike(term),
+                    AdminOperation.requested_by.ilike(term),
+                )
+            )
+        if status and status in {item.value for item in OperationStatus}:
+            query = query.where(AdminOperation.status == OperationStatus(status))
+        if operation_type and operation_type.strip():
+            query = query.where(AdminOperation.operation_type == operation_type.strip())
+        ordering = (
+            AdminOperation.created_at.asc() if order == "asc" else AdminOperation.created_at.desc()
+        )
+        async with self._session_factory() as session:
+            return list(
+                (
+                    await session.scalars(query.order_by(ordering).limit(max(1, min(limit, 500))))
+                ).all()
+            )
+
+    async def operation_types(self) -> list[str]:
         async with self._session_factory() as session:
             return list(
                 (
                     await session.scalars(
-                        select(AdminOperation)
-                        .order_by(AdminOperation.created_at.desc())
-                        .limit(max(1, min(limit, 500)))
+                        select(AdminOperation.operation_type)
+                        .distinct()
+                        .order_by(AdminOperation.operation_type)
                     )
                 ).all()
             )
+
+    async def clear_terminal(self, scope: str = "all_terminal") -> int:
+        allowed = {
+            "all_terminal": list(_TERMINAL),
+            "succeeded": [OperationStatus.SUCCEEDED],
+            "failed": [OperationStatus.FAILED],
+            "cancelled": [OperationStatus.CANCELLED],
+            "skipped": [OperationStatus.SKIPPED],
+        }
+        statuses = allowed.get(scope)
+        if statuses is None:
+            raise ValidationError("Unsupported operation clear scope")
+        async with self._session_factory() as session:
+            result = await session.execute(
+                delete(AdminOperation).where(AdminOperation.status.in_(statuses))
+            )
+            await session.commit()
+            return int(result.rowcount or 0)
 
     async def logs_since(self, operation_id: UUID, sequence: int = 0) -> list[OperationLog]:
         async with self._session_factory() as session:
@@ -157,6 +214,26 @@ class OperationService:
             operation.completed_at = datetime.now(UTC)
             await session.commit()
         await self.append_log(operation_id, "Operation completed successfully", progress=100)
+
+    async def skip(self, operation_id: UUID, message: str, result: dict[str, Any]) -> None:
+        safe = message.strip()[:4000] or "Operation skipped"
+        async with self._session_factory() as session:
+            operation = await session.get(AdminOperation, operation_id)
+            if operation is None:
+                return
+            operation.status = OperationStatus.SKIPPED
+            operation.progress = 100
+            operation.result_payload = result
+            operation.error_message = None
+            operation.completed_at = datetime.now(UTC)
+            await session.commit()
+        await self.append_log(
+            operation_id,
+            safe,
+            level="notice",
+            data={"outcome": "already_exists", **result},
+            progress=100,
+        )
 
     async def fail(self, operation_id: UUID, message: str) -> None:
         safe = message.strip()[:4000] or "Operation failed"
@@ -291,6 +368,18 @@ class OperationRunner:
             await self._log(operation_id, 2, f"Starting {operation.title}")
             result = await self._dispatch(operation)
             await self.service.complete(operation_id, result)
+        except DuplicateTemplateError as exc:
+            await self.service.skip(
+                operation_id,
+                "No import was required: this repository is already registered in RegHub.",
+                {
+                    "outcome": "already_exists",
+                    "template_id": str(exc.template_id),
+                    "template_slug": exc.template_slug,
+                    "template_name": exc.template_name,
+                    "template_url": f"/admin/template/details/{exc.template_id}",
+                },
+            )
         except asyncio.CancelledError:
             if self._shutting_down:
                 await self.service.fail(
@@ -300,6 +389,12 @@ class OperationRunner:
                 await self.service.cancel(operation_id)
         except Exception as exc:
             logger.exception("Admin operation %s failed", operation_id)
+            await self.service.append_log(
+                operation_id,
+                f"{exc.__class__.__name__}: {exc}",
+                level="error",
+                data={"exception_type": exc.__class__.__name__},
+            )
             await self.service.fail(operation_id, str(exc))
 
     async def _dispatch(self, operation: AdminOperation) -> dict[str, Any]:

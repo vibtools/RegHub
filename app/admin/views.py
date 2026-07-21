@@ -3,6 +3,7 @@ import json
 import logging
 import secrets
 import tempfile
+from datetime import UTC, datetime
 from hmac import compare_digest
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -10,7 +11,7 @@ from uuid import UUID
 
 from sqladmin import BaseView, ModelView, action, expose
 from sqladmin.filters import BooleanFilter, ForeignKeyFilter, StaticValuesFilter
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from starlette.datastructures import URL, UploadFile
 from starlette.requests import Request
 from starlette.responses import (
@@ -20,7 +21,13 @@ from starlette.responses import (
     StreamingResponse,
 )
 
-from app.core.enums import OperationStatus, TemplateStatus
+from app.core.enums import (
+    ImportStatus,
+    OperationStatus,
+    ProviderType,
+    ScreenshotJobStatus,
+    TemplateStatus,
+)
 from app.core.exceptions import RegistryError, ValidationError
 from app.database.session import async_session_factory
 from app.models.category import Category
@@ -39,6 +46,7 @@ _TERMINAL_OPERATION_VALUES = {
     OperationStatus.SUCCEEDED.value,
     OperationStatus.FAILED.value,
     OperationStatus.CANCELLED.value,
+    OperationStatus.SKIPPED.value,
 }
 
 
@@ -83,14 +91,38 @@ class CategoryAdmin(ModelView, model=Category):
 class ProviderAdmin(ModelView, model=Provider):
     icon = "fa-solid fa-building"
     column_list = [Provider.name, Provider.slug, Provider.provider_type, Provider.is_active]
-    column_searchable_list = [Provider.name, Provider.slug]
+    column_searchable_list = [Provider.name, Provider.slug, Provider.website_url]
+    column_sortable_list = [
+        Provider.name,
+        Provider.provider_type,
+        Provider.is_active,
+        Provider.created_at,
+        Provider.updated_at,
+    ]
+    column_default_sort = [(Provider.name, False)]
+    column_filters = [
+        StaticValuesFilter(
+            Provider.provider_type,
+            [(item.name, item.value.title()) for item in ProviderType],
+            title="Provider type",
+        ),
+        BooleanFilter(Provider.is_active, title="Active"),
+    ]
     form_excluded_columns = [Provider.templates, Provider.created_at, Provider.updated_at]
 
 
 class FrameworkAdmin(ModelView, model=Framework):
     icon = "fa-solid fa-layer-group"
     column_list = [Framework.name, Framework.slug, Framework.is_active, Framework.updated_at]
-    column_searchable_list = [Framework.name, Framework.slug]
+    column_searchable_list = [Framework.name, Framework.slug, Framework.website_url]
+    column_sortable_list = [
+        Framework.name,
+        Framework.is_active,
+        Framework.created_at,
+        Framework.updated_at,
+    ]
+    column_default_sort = [(Framework.name, False)]
+    column_filters = [BooleanFilter(Framework.is_active, title="Active")]
     form_excluded_columns = [Framework.templates, Framework.created_at, Framework.updated_at]
 
 
@@ -114,8 +146,11 @@ class TemplateAdmin(ModelView, model=Template):
         Template.status,
         Template.quality_score,
         Template.stars_count,
+        Template.created_at,
+        Template.published_at,
         Template.updated_at,
     ]
+    column_default_sort = [(Template.updated_at, True), (Template.name, False)]
     column_filters = [
         StaticValuesFilter(
             Template.status,
@@ -128,6 +163,18 @@ class TemplateAdmin(ModelView, model=Template):
             Framework.name,
             foreign_model=Framework,
             title="Framework",
+        ),
+        ForeignKeyFilter(
+            Template.provider_id,
+            Provider.name,
+            foreign_model=Provider,
+            title="Provider",
+        ),
+        ForeignKeyFilter(
+            Template.category_id,
+            Category.name,
+            foreign_model=Category,
+            title="Category",
         ),
     ]
     form_excluded_columns = [
@@ -254,6 +301,30 @@ class TemplateAdmin(ModelView, model=Template):
 class ImportHistoryAdmin(ModelView, model=ImportHistory):
     name_plural = "Import History"
     icon = "fa-solid fa-clock-rotate-left"
+    column_searchable_list = [
+        ImportHistory.repository_url,
+        ImportHistory.adapter,
+        ImportHistory.requested_by,
+    ]
+    column_sortable_list = [
+        ImportHistory.status,
+        ImportHistory.adapter,
+        ImportHistory.created_at,
+        ImportHistory.completed_at,
+    ]
+    column_default_sort = [(ImportHistory.created_at, True)]
+    column_filters = [
+        StaticValuesFilter(
+            ImportHistory.status,
+            [(item.name, item.value.title()) for item in ImportStatus],
+            title="Status",
+        ),
+        StaticValuesFilter(
+            ImportHistory.adapter,
+            [(value, value.title()) for value in ["github", "gitlab", "bitbucket", "local"]],
+            title="Adapter",
+        ),
+    ]
     column_list = [
         ImportHistory.repository_url,
         ImportHistory.adapter,
@@ -271,6 +342,36 @@ class ImportHistoryAdmin(ModelView, model=ImportHistory):
 class SyncHistoryAdmin(ModelView, model=SyncHistory):
     name_plural = "Sync History"
     icon = "fa-solid fa-arrows-rotate"
+    column_searchable_list = [
+        SyncHistory.adapter,
+        SyncHistory.trigger,
+        SyncHistory.requested_by,
+        SyncHistory.source_revision,
+    ]
+    column_sortable_list = [
+        SyncHistory.status,
+        SyncHistory.adapter,
+        SyncHistory.created_at,
+        SyncHistory.completed_at,
+    ]
+    column_default_sort = [(SyncHistory.created_at, True)]
+    column_filters = [
+        StaticValuesFilter(
+            SyncHistory.status,
+            [(item.name, item.value.title()) for item in ImportStatus],
+            title="Status",
+        ),
+        StaticValuesFilter(
+            SyncHistory.adapter,
+            [(value, value.title()) for value in ["github", "gitlab", "bitbucket"]],
+            title="Adapter",
+        ),
+        StaticValuesFilter(
+            SyncHistory.trigger,
+            [(value, value.title()) for value in ["import", "manual", "scheduled"]],
+            title="Trigger",
+        ),
+    ]
     column_list = [
         SyncHistory.template,
         SyncHistory.adapter,
@@ -290,6 +391,9 @@ class SyncHistoryAdmin(ModelView, model=SyncHistory):
 class TemplateVersionAdmin(ModelView, model=TemplateVersion):
     name_plural = "Template Versions"
     icon = "fa-solid fa-code-branch"
+    column_searchable_list = [TemplateVersion.source_revision]
+    column_sortable_list = [TemplateVersion.created_at]
+    column_default_sort = [(TemplateVersion.created_at, True)]
     column_list = [
         TemplateVersion.template,
         TemplateVersion.source_revision,
@@ -304,6 +408,29 @@ class TemplateVersionAdmin(ModelView, model=TemplateVersion):
 class TemplateAssetAdmin(ModelView, model=TemplateAsset):
     name_plural = "Template Assets"
     icon = "fa-solid fa-images"
+    column_searchable_list = [TemplateAsset.url, TemplateAsset.kind, TemplateAsset.source]
+    column_sortable_list = [
+        TemplateAsset.kind,
+        TemplateAsset.source,
+        TemplateAsset.sort_order,
+        TemplateAsset.created_at,
+    ]
+    column_default_sort = [(TemplateAsset.created_at, True)]
+    column_filters = [
+        StaticValuesFilter(
+            TemplateAsset.kind,
+            [(value, value.title()) for value in ["screenshot", "thumbnail", "preview", "image"]],
+            title="Kind",
+        ),
+        StaticValuesFilter(
+            TemplateAsset.source,
+            [
+                (value, value.title())
+                for value in ["github", "gitlab", "bitbucket", "manual", "screenshot-service"]
+            ],
+            title="Source",
+        ),
+    ]
     column_list = [
         TemplateAsset.template,
         TemplateAsset.kind,
@@ -320,6 +447,25 @@ class TemplateAssetAdmin(ModelView, model=TemplateAsset):
 class ScreenshotJobAdmin(ModelView, model=ScreenshotJob):
     name_plural = "Screenshot Jobs"
     icon = "fa-solid fa-camera"
+    column_searchable_list = [
+        ScreenshotJob.preview_url,
+        ScreenshotJob.screenshot_url,
+        ScreenshotJob.requested_by,
+    ]
+    column_sortable_list = [
+        ScreenshotJob.status,
+        ScreenshotJob.attempts,
+        ScreenshotJob.created_at,
+        ScreenshotJob.completed_at,
+    ]
+    column_default_sort = [(ScreenshotJob.created_at, True)]
+    column_filters = [
+        StaticValuesFilter(
+            ScreenshotJob.status,
+            [(item.name, item.value.title()) for item in ScreenshotJobStatus],
+            title="Status",
+        )
+    ]
     column_list = [
         ScreenshotJob.template,
         ScreenshotJob.status,
@@ -414,7 +560,16 @@ class OperationsConsoleView(_AdminBaseView):
     @expose("/operations", methods=["GET"])
     async def operations(self, request: Request):
         container = self._admin_ref.app.state.container
-        operations = await container.operation_service.list_recent()
+        search = (request.query_params.get("q") or "").strip()
+        status = (request.query_params.get("status") or "").strip()
+        operation_type = (request.query_params.get("type") or "").strip()
+        order = "asc" if request.query_params.get("order") == "asc" else "desc"
+        operations = await container.operation_service.list_recent(
+            search=search or None,
+            status=status or None,
+            operation_type=operation_type or None,
+            order=order,
+        )
         return await self.templates.TemplateResponse(
             request,
             "operations_list.html",
@@ -422,7 +577,29 @@ class OperationsConsoleView(_AdminBaseView):
                 "title": "Operations Console",
                 "operations": operations,
                 "enabled": container.feature_enabled("operations_console"),
+                "csrf_token": self._csrf(request, "operation_list_csrf"),
+                "search": search,
+                "status_filter": status,
+                "type_filter": operation_type,
+                "order": order,
+                "operation_types": await container.operation_service.operation_types(),
+                "operation_statuses": [item.value for item in OperationStatus],
+                "message": request.query_params.get("message"),
             },
+        )
+
+    @expose("/operations/clear", methods=["POST"])
+    async def clear_operations(self, request: Request):
+        form = await request.form()
+        self._validate_csrf(form, self._csrf(request, "operation_list_csrf"))
+        count = await self._admin_ref.app.state.container.operation_service.clear_terminal(
+            str(form.get("scope", "all_terminal"))
+        )
+        return RedirectResponse(
+            URL("/admin/operations").include_query_params(
+                message=f"Cleared {count} terminal operation(s) and their logs"
+            ),
+            status_code=302,
         )
 
     @expose("/operations/{operation_id}", methods=["GET"])
@@ -598,8 +775,10 @@ class SettingsView(_AdminBaseView):
     async def settings(self, request: Request):
         csrf_token = self._csrf(request, "settings_csrf")
         container = self._admin_ref.app.state.container
+        api_access = getattr(container, "api_access", None)
         success: str | None = None
         error: str | None = None
+        new_api_token: str | None = None
         if request.method == "POST":
             form = await request.form()
             try:
@@ -649,6 +828,67 @@ class SettingsView(_AdminBaseView):
                 elif action_name == "reload_runtime":
                     await container.reload_runtime()
                     success = "Runtime configuration reloaded."
+                elif action_name == "save_api_mode":
+                    if api_access is None:
+                        raise ValidationError("API access management is unavailable")
+                    await api_access.set_mode(str(form.get("api_mode", "development")), identity)
+                    success = "API access mode updated immediately."
+                elif action_name == "create_api_token":
+                    expires_raw = str(form.get("expires_at", "")).strip()
+                    expires_at = (
+                        datetime.fromisoformat(expires_raw).replace(tzinfo=UTC)
+                        if expires_raw
+                        else None
+                    )
+                    if api_access is None:
+                        raise ValidationError("API access management is unavailable")
+                    _row, new_api_token = await api_access.create_token(
+                        name=str(form.get("token_name", "")),
+                        scopes=[str(value) for value in form.getlist("scopes")],
+                        description=str(form.get("description", "")) or None,
+                        expires_at=expires_at,
+                        created_by=identity,
+                    )
+                    success = "Service token created. Copy it now; RegHub will not show it again."
+                elif action_name == "toggle_api_token":
+                    if api_access is None:
+                        raise ValidationError("API access management is unavailable")
+                    await api_access.set_token_enabled(
+                        UUID(str(form.get("token_id", ""))),
+                        self._bool(form, "enabled"),
+                        identity,
+                    )
+                    success = "Service token state updated."
+                elif action_name == "delete_api_token":
+                    if api_access is None:
+                        raise ValidationError("API access management is unavailable")
+                    await api_access.delete_token(UUID(str(form.get("token_id", ""))))
+                    success = "Service token deleted."
+                elif action_name == "add_block_rule":
+                    if api_access is None:
+                        raise ValidationError("API access management is unavailable")
+                    await api_access.add_block_rule(
+                        value=str(form.get("block_value", "")),
+                        note=str(form.get("note", "")) or None,
+                        created_by=identity,
+                    )
+                    success = "API block rule added."
+                elif action_name == "update_block_rule":
+                    if api_access is None:
+                        raise ValidationError("API access management is unavailable")
+                    await api_access.update_block_rule(
+                        UUID(str(form.get("rule_id", ""))),
+                        value=str(form.get("block_value", "")),
+                        enabled=self._bool(form, "enabled"),
+                        note=str(form.get("note", "")) or None,
+                        updated_by=identity,
+                    )
+                    success = "API block rule updated."
+                elif action_name == "delete_block_rule":
+                    if api_access is None:
+                        raise ValidationError("API access management is unavailable")
+                    await api_access.delete_block_rule(UUID(str(form.get("rule_id", ""))))
+                    success = "API block rule deleted."
                 else:
                     raise ValidationError("Unsupported settings action")
             except json.JSONDecodeError:
@@ -684,8 +924,64 @@ class SettingsView(_AdminBaseView):
                 "integration_cards": integration_cards,
                 "success": success,
                 "error": error,
+                "api_mode": api_access.mode if api_access else "development",
+                "api_tokens": await api_access.token_rows() if api_access else [],
+                "api_block_rules": await api_access.block_rule_rows() if api_access else [],
+                "api_scopes": api_access.SCOPES if api_access else [],
+                "new_api_token": new_api_token,
             },
         )
+
+    @expose("/settings/api-check", methods=["POST"])
+    async def api_check(self, request: Request):
+        form = await request.form()
+        self._validate_csrf(form, self._csrf(request, "settings_csrf"))
+        container = self._admin_ref.app.state.container
+        token = container.api_access.issue_check_token()
+        import httpx
+
+        paths = [
+            "/api/v1/health",
+            "/api/v1/ready",
+            "/api/v1/capabilities",
+            "/api/v1/templates?page=1&page_size=1",
+            "/api/v1/categories",
+            "/api/v1/providers",
+            "/api/v1/frameworks",
+            "/api/v1/facets",
+        ]
+        results = []
+        transport = httpx.ASGITransport(app=request.app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url=f"{request.url.scheme}://{request.url.netloc}",
+            timeout=15,
+        ) as client:
+            for path in paths:
+                started = datetime.now(UTC)
+                try:
+                    response = await client.get(
+                        path,
+                        headers={
+                            "Authorization": f"Bearer {token}",
+                            "X-Request-ID": "admin-api-check",
+                        },
+                    )
+                    elapsed = int((datetime.now(UTC) - started).total_seconds() * 1000)
+                    results.append(
+                        {
+                            "path": path,
+                            "status": response.status_code,
+                            "ok": response.status_code < 400,
+                            "duration_ms": elapsed,
+                            "body": response.text[:500],
+                        }
+                    )
+                except Exception as exc:
+                    results.append(
+                        {"path": path, "status": 0, "ok": False, "duration_ms": 0, "body": str(exc)}
+                    )
+        return JSONResponse({"mode": container.api_access.mode, "results": results})
 
 
 class GitHubImportView(_AdminBaseView):
@@ -893,19 +1189,56 @@ class AssetGalleryView(_AdminBaseView):
                 logger.exception("Unexpected asset gallery failure")
                 error = "Asset operation failed unexpectedly. Check the application logs."
 
+        template_query = (request.query_params.get("q") or "").strip()
+        asset_query = (request.query_params.get("asset_q") or "").strip()
+        asset_kind = (request.query_params.get("kind") or "").strip()
         async with async_session_factory() as session:
-            templates = list(
-                (await session.scalars(select(Template).order_by(Template.name))).all()
-            )
             selected = None
-            assets: list[TemplateAsset] = []
             if selected_template_id:
                 try:
                     selected = await session.get(Template, UUID(selected_template_id))
                 except ValueError:
                     selected = None
+            template_statement = select(Template)
+            if template_query:
+                term = f"%{template_query}%"
+                template_statement = template_statement.where(
+                    or_(
+                        Template.name.ilike(term),
+                        Template.slug.ilike(term),
+                        Template.repository_url.ilike(term),
+                    )
+                )
+            templates = list(
+                (await session.scalars(template_statement.order_by(Template.name).limit(100))).all()
+            )
+            if selected and all(item.id != selected.id for item in templates):
+                templates.insert(0, selected)
+            assets: list[TemplateAsset] = []
             if selected:
-                assets = await TemplateAssetService.list_for_template(session, selected.id)
+                asset_statement = select(TemplateAsset).where(
+                    TemplateAsset.template_id == selected.id
+                )
+                if asset_query:
+                    term = f"%{asset_query}%"
+                    asset_statement = asset_statement.where(
+                        or_(
+                            TemplateAsset.url.ilike(term),
+                            TemplateAsset.source.ilike(term),
+                            TemplateAsset.kind.ilike(term),
+                        )
+                    )
+                if asset_kind:
+                    asset_statement = asset_statement.where(TemplateAsset.kind == asset_kind)
+                assets = list(
+                    (
+                        await session.scalars(
+                            asset_statement.order_by(
+                                TemplateAsset.sort_order, TemplateAsset.created_at
+                            )
+                        )
+                    ).all()
+                )
         return await self.templates.TemplateResponse(
             request,
             "asset_gallery.html",
@@ -918,5 +1251,8 @@ class AssetGalleryView(_AdminBaseView):
                 "success": success,
                 "error": error,
                 "feature_enabled": container.feature_enabled("asset_gallery", task=True),
+                "template_query": template_query,
+                "asset_query": asset_query,
+                "asset_kind": asset_kind,
             },
         )

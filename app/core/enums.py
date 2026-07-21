@@ -43,3 +43,4 @@ class OperationStatus(StrEnum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    SKIPPED = "skipped"

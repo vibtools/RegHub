@@ -28,10 +28,11 @@ from app.schemas.manifest import TemplateManifest
 router = APIRouter(tags=["registry"])
 
 
-def _require_api(request: Request, feature: str) -> None:
+async def _require_api(request: Request, feature: str, scope: str) -> None:
     container = request.app.state.container
     container.require_feature("public_api")
     container.require_feature(feature)
+    await container.api_access.authorize(request, scope)
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -80,7 +81,7 @@ async def list_templates(
     sort: str = Query(default="featured", pattern="^(featured|newest|updated|quality|stars|name)$"),
     order: str = Query(default="desc", pattern="^(asc|desc)$"),
 ):
-    _require_api(request, "api_catalog")
+    await _require_api(request, "api_catalog", "catalog")
     records, total, pages = await TemplateService.list_public(
         session,
         page=page,
@@ -118,7 +119,7 @@ async def template_changes(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=100, ge=1, le=100),
 ):
-    _require_api(request, "api_changes")
+    await _require_api(request, "api_changes", "changes")
     records, total, pages = await TemplateService.list_public(
         session,
         page=page,
@@ -146,7 +147,7 @@ async def template_changes(
 async def template_detail(
     slug: str, request: Request, response: Response, session: DatabaseSession
 ):
-    _require_api(request, "api_catalog")
+    await _require_api(request, "api_catalog", "catalog")
     template = await TemplateService.get_public_by_slug(session, slug)
     _cache(response)
     if _entity_headers(request, response, str(template.id), template.updated_at):
@@ -158,7 +159,7 @@ async def template_detail(
 async def template_manifest(
     slug: str, request: Request, response: Response, session: DatabaseSession
 ):
-    _require_api(request, "api_catalog")
+    await _require_api(request, "api_catalog", "catalog")
     template = await TemplateService.get_public_by_slug(session, slug)
     _cache(response)
     if _entity_headers(request, response, f"manifest:{template.id}", template.updated_at):
@@ -170,7 +171,7 @@ async def template_manifest(
 async def template_assets(
     slug: str, request: Request, response: Response, session: DatabaseSession
 ):
-    _require_api(request, "api_assets")
+    await _require_api(request, "api_assets", "assets")
     assets = await TemplateService.list_public_assets(session, slug)
     _cache(response)
     return AssetListResponse(
@@ -183,7 +184,7 @@ async def template_assets(
 async def template_freshness(
     slug: str, request: Request, response: Response, session: DatabaseSession
 ):
-    _require_api(request, "api_freshness")
+    await _require_api(request, "api_freshness", "freshness")
     freshness = await TemplateService.public_freshness(session, slug)
     response.headers["Cache-Control"] = "public, max-age=30, stale-while-revalidate=30"
     return FreshnessResponse(
@@ -194,7 +195,7 @@ async def template_freshness(
 
 @router.get("/facets", response_model=FacetsResponse)
 async def facets(request: Request, response: Response, session: DatabaseSession):
-    _require_api(request, "api_facets")
+    await _require_api(request, "api_facets", "facets")
     _cache(response)
     return FacetsResponse(
         data=await TemplateService.public_facets(session),
@@ -205,31 +206,32 @@ async def facets(request: Request, response: Response, session: DatabaseSession)
 # Legacy v1 resource endpoints remain unchanged for backward compatibility.
 @router.get("/categories", response_model=list[CategoryRead])
 async def categories(request: Request, response: Response, session: DatabaseSession):
-    _require_api(request, "api_catalog")
+    await _require_api(request, "api_catalog", "catalog")
     _cache(response)
     return await CategoryService.list_active(session)
 
 
 @router.get("/providers", response_model=list[ProviderRead])
 async def providers(request: Request, response: Response, session: DatabaseSession):
-    _require_api(request, "api_catalog")
+    await _require_api(request, "api_catalog", "catalog")
     _cache(response)
     return await ProviderService.list_active(session)
 
 
 @router.get("/frameworks", response_model=list[FrameworkRead])
 async def frameworks(request: Request, response: Response, session: DatabaseSession):
-    _require_api(request, "api_catalog")
+    await _require_api(request, "api_catalog", "catalog")
     _cache(response)
     return await FrameworkService.list_active(session)
 
 
 @router.get("/capabilities", response_model=CapabilitiesRead)
 async def capabilities(request: Request, response: Response):
-    _cache(response)
     container = request.app.state.container
+    await _require_api(request, "api_catalog", "capabilities")
+    _cache(response)
     return CapabilitiesRead(
-        version="0.2.2.1",
+        version="0.2.3",
         registry_adapters=[*container.adapter_names, "local-manifest", "local-zip"],
         framework_detection=[
             "astro",
@@ -254,4 +256,6 @@ async def capabilities(request: Request, response: Response):
         freshness_api_enabled=container.feature_enabled("api_freshness"),
         operations_console_enabled=container.feature_enabled("operations_console"),
         public_api_enabled=container.feature_enabled("public_api"),
+        api_access_mode=container.api_access.mode,
+        service_token_required=container.api_access.live_mode,
     )
