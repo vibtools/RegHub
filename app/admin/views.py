@@ -90,6 +90,51 @@ def _operation_url(operation_id: UUID) -> str:
     return f"/admin/operations/{operation_id}"
 
 
+def _operation_template_id(operation: object) -> UUID | None:
+    result = getattr(operation, "result_payload", None) or {}
+    raw_identifier = result.get("template_id") if isinstance(result, dict) else None
+    if not raw_identifier:
+        return None
+    try:
+        return UUID(str(raw_identifier))
+    except (TypeError, ValueError):
+        return None
+
+
+async def _operation_template_summary(
+    container: object, operation: object
+) -> dict[str, object] | None:
+    template_id = _operation_template_id(operation)
+    session_factory = getattr(container, "session_factory", None)
+    if template_id is None or session_factory is None:
+        return None
+    async with session_factory() as session:
+        template = await session.get(Template, template_id)
+        if template is None:
+            return None
+        screenshots = list(template.screenshots or [])
+        thumbnail_url = template.thumbnail_url or next(
+            (item for item in screenshots if isinstance(item, str) and item.startswith("https://")),
+            None,
+        )
+        return {
+            "id": str(template.id),
+            "name": template.name,
+            "slug": template.slug,
+            "short_description": template.short_description or template.description or "",
+            "thumbnail_url": thumbnail_url,
+            "repository_url": template.repository_url,
+            "repository_adapter": template.repository_adapter,
+            "provider": template.provider.name if template.provider else "Unassigned",
+            "category": template.category.name if template.category else "Unassigned",
+            "framework": template.framework.name if template.framework else "Unknown",
+            "framework_version": template.framework_version,
+            "quality_score": template.quality_score,
+            "status": template.status.value,
+            "details_url": f"/admin/template/details/{template.id}",
+        }
+
+
 def _write_temporary_zip(data: bytes) -> str:
     temp_dir = Path(tempfile.gettempdir()) / "reghub-operations"
     temp_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -631,6 +676,8 @@ class OperationsConsoleView(_AdminBaseView):
             operation_id, with_logs=True
         )
         csrf_token = self._csrf(request, "operation_action_csrf")
+        container = self._admin_ref.app.state.container
+        template_summary = await _operation_template_summary(container, operation)
         return await self.templates.TemplateResponse(
             request,
             "operation_detail.html",
@@ -639,14 +686,15 @@ class OperationsConsoleView(_AdminBaseView):
                 "operation": operation,
                 "csrf_token": csrf_token,
                 "terminal": operation.status.value in _TERMINAL_OPERATION_VALUES,
+                "template_summary": template_summary,
             },
         )
 
     @expose("/operations/{operation_id}/status", methods=["GET"])
     async def operation_status(self, request: Request):
-        operation = await self._admin_ref.app.state.container.operation_service.get(
-            UUID(request.path_params["operation_id"])
-        )
+        container = self._admin_ref.app.state.container
+        operation = await container.operation_service.get(UUID(request.path_params["operation_id"]))
+        template_summary = await _operation_template_summary(container, operation)
         return JSONResponse(
             {
                 "id": str(operation.id),
@@ -654,6 +702,7 @@ class OperationsConsoleView(_AdminBaseView):
                 "progress": operation.progress,
                 "error": operation.error_message,
                 "result": operation.result_payload,
+                "template": template_summary,
                 "completed_at": operation.completed_at.isoformat()
                 if operation.completed_at
                 else None,
@@ -692,7 +741,8 @@ class OperationsConsoleView(_AdminBaseView):
     @expose("/operations/{operation_id}/events", methods=["GET"])
     async def operation_events(self, request: Request):
         operation_id = UUID(request.path_params["operation_id"])
-        service = self._admin_ref.app.state.container.operation_service
+        container = self._admin_ref.app.state.container
+        service = container.operation_service
 
         async def stream():
             sequence = int(request.query_params.get("after", "0") or 0)
@@ -716,12 +766,18 @@ class OperationsConsoleView(_AdminBaseView):
                         separators=(",", ":"),
                     )
                     yield f"id: {item.sequence}\nevent: log\ndata: {payload}\n\n"
+                template_summary = (
+                    await _operation_template_summary(container, operation)
+                    if operation.status.value in _TERMINAL_OPERATION_VALUES
+                    else None
+                )
                 status_payload = json.dumps(
                     {
                         "status": operation.status.value,
                         "progress": operation.progress,
                         "error": operation.error_message,
                         "result": operation.result_payload,
+                        "template": template_summary,
                     },
                     separators=(",", ":"),
                 )
@@ -779,6 +835,35 @@ class OperationsConsoleView(_AdminBaseView):
         container = self._admin_ref.app.state.container
         operation = await container.operation_service.clone_for_retry(
             UUID(request.path_params["operation_id"]), request.state.admin_identity.subject
+        )
+        container.operation_runner.enqueue(operation.id)
+        return RedirectResponse(_operation_url(operation.id), status_code=302)
+
+    @expose("/operations/{operation_id}/continue-update", methods=["POST"])
+    async def continue_duplicate_update(self, request: Request):
+        csrf = self._csrf(request, "operation_action_csrf")
+        form = await request.form()
+        self._validate_csrf(form, csrf)
+        container = self._admin_ref.app.state.container
+        source = await container.operation_service.get(UUID(request.path_params["operation_id"]))
+        result = source.result_payload or {}
+        if (
+            source.status != OperationStatus.SKIPPED
+            or result.get("outcome") != "already_exists"
+            or not result.get("template_id")
+        ):
+            raise ValidationError("Only an already-imported repository can continue as an update")
+        template_id = UUID(str(result["template_id"]))
+        template_name = str(
+            result.get("template_name") or result.get("template_slug") or template_id
+        )
+        operation = await container.operation_service.create(
+            operation_type="sync_templates",
+            title=f"Update imported template: {template_name}",
+            requested_by=request.state.admin_identity.subject,
+            input_payload={"template_ids": [str(template_id)]},
+            return_url=f"/admin/template/details/{template_id}",
+            retry_of_id=source.id,
         )
         container.operation_runner.enqueue(operation.id)
         return RedirectResponse(_operation_url(operation.id), status_code=302)

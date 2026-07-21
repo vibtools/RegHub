@@ -623,6 +623,7 @@ class OperationRunner:
             raise ValidationError("No templates were selected")
         errors: list[str] = []
         synced = 0
+        synced_template: Any | None = None
         total = len(identifiers)
         await self._log(
             operation.id,
@@ -660,6 +661,7 @@ class OperationRunner:
                     progress=progress,
                 )
                 synced += 1
+                synced_template = template
                 await self._log(
                     operation.id,
                     5 + int(index / total * 85),
@@ -670,7 +672,16 @@ class OperationRunner:
                 await self._log(operation.id, 5 + int(index / total * 85), str(exc), "error")
         if errors and not synced:
             raise ValidationError("; ".join(errors))
-        result = {"synced": synced, "failed": len(errors), "errors": errors}
+        result: dict[str, Any] = {"synced": synced, "failed": len(errors), "errors": errors}
+        if total == 1 and synced_template is not None:
+            result.update(
+                {
+                    "template_id": str(synced_template.id),
+                    "template_slug": synced_template.slug,
+                    "template_name": synced_template.name,
+                    "status": synced_template.status.value,
+                }
+            )
         await self._log(operation.id, 94, "Sync batch result", "debug", result)
         return result
 

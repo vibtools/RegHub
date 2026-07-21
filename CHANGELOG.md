@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.3.4 - 2026-07-21
+
+### Import completion experience
+
+- Added a context-aware View Template action beside the live progress refresh control.
+- Added a production template result card with thumbnail, title, short description, provider, category, framework, slug, quality score, status, repository, and details links.
+- Added live status payload enrichment so the template card appears without reloading after import completion.
+- Kept duplicate imports as Skipped / no-change and replaced failure-style messaging with a clear Already found state.
+- Added Continue to update template, which queues a single-template source synchronization while preserving curated registry fields.
+- Added no database migration and removed no existing API, Settings control, operation, template record, Keycloak route, or deployment behavior.
+
 ## 0.2.3.3 - 2026-07-21
 
 - Added a dedicated Settings AJAX mutation endpoint to eliminate production HTTP 404 responses.

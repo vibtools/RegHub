@@ -1,60 +1,47 @@
-# RegHub v0.2.3.3 Settings Action & UI Responsiveness Hotfix — Master Audit
+# RegHub v0.2.3.4 Import Experience Hotfix — Forensic Audit
 
-## Baseline and zero-freedom compatibility
+## Baseline integrity
 
-- Built directly from the live v0.2.3.2 replace-ready archive.
-- Baseline source files removed: **0**.
-- Existing public API routes, administrator pages, OIDC/Keycloak behavior, runtime feature flags,
-  integration records, encrypted credentials, API service tokens, block rules, template records,
-  operation history, Docker entrypoint, Coolify variables, and deployment boundaries are preserved.
-- Database revision remains `20260721_0005`; this hotfix includes no Alembic migration.
+- Baseline: v0.2.3.3 replace-ready source.
+- Existing source files removed: 0.
+- Database migration added: none.
+- Existing public API, Settings, Operations, service-token, Keycloak, template, asset, sync and
+  Coolify behavior is retained.
 
-## Production incident finding
+## Findings and corrections
 
-The live deployment returned HTTP 404 when Settings mutations were sent to the same mixed GET/POST
-page URL used to render `/admin/settings`. The route is accepted by the local SQLAdmin test stack,
-but the deployed route/proxy combination did not reliably dispatch those asynchronous POST requests.
-The client then retained the form busy state after the failed request, making the Settings interface
-appear frozen.
+### Import result discoverability
 
-## Corrections
+Completed imports previously exposed only raw result JSON and required manual navigation. The live
+operation status now resolves a bounded template summary from the existing template ID and provides
+View Template and source links.
 
-- Added a dedicated authenticated and CSRF-protected `POST /admin/settings/action` route for every
-  Settings mutation.
-- Preserved `POST /admin/settings` as the no-JavaScript fallback.
-- Replaced only the active Settings tab pane after a successful action; the page shell, navigation,
-  and inactive tabs are not rebuilt.
-- Only the clicked submit button is disabled while saving. Other tabs and controls remain usable.
-- Added a bounded 45-second client timeout, safe button restoration, and inline failure feedback.
-- Refreshed server alerts and CSRF values without a full page reload.
-- Synchronized URL hash/query state and every hidden `return_tab` field.
-- Preserved expanded accordion sections and the browser scroll position after a pane refresh.
+### Operation side panel
 
-## Master audit results
+The operation controls area previously contained only requester timestamps. It now adds a responsive
+result card while retaining cancel, retry, requester and timestamp controls.
 
-- Automated tests: **93 passed**
-- Application statement coverage: **71%**
-- Ruff lint: **PASS**
-- Ruff formatting: **PASS**
-- Python compilation: **PASS**
-- Jinja template parse/compile: **PASS** (10 templates)
-- Settings JavaScript syntax (`node --check`): **PASS**
-- Dedicated Settings action route smoke test: **PASS**
-- Original non-JavaScript Settings fallback: **PASS**
-- PostgreSQL table DDL compilation: **PASS** (16 tables)
-- Alembic PostgreSQL offline upgrade through head: **PASS**
-- Python wheel and source distribution build: **PASS**
-- Dependency integrity (`pip check`): **PASS**
-- Secret-pattern and committed `.env` scan: **PASS**
-- Baseline source files removed: **0**
-- New database migration: **none**
+### Duplicate repository behavior
 
-One non-blocking Starlette TestClient deprecation warning is emitted by the test dependency. It is
-not a production runtime failure.
+The core v0.2.3.3 runner already represented duplicates as `skipped`; this release makes the state
+explicit in the UI as **Already found**, guarantees failure styling is not used, and offers a safe
+continuation workflow instead of creating another template.
 
-## Remaining deployment-time checks
+### Continue update workflow
 
-- Browser Settings actions through the live Coolify reverse proxy
-- Keycloak administrator session continuity after redeployment
-- JavaScript-disabled fallback on the production domain
-- Runtime provider/API credentials against their real external services
+The new authenticated, CSRF-protected action validates that the source operation is a skipped
+`already_exists` import, then queues the existing single-template source synchronization workflow.
+It does not bypass feature gates or perform repository code execution.
+
+## Automated verification
+
+- Tests: 96 passed.
+- Application statement coverage: 72%.
+- Ruff lint and formatting: pass.
+- Import operation/card/duplicate continuation regression tests: pass.
+- No database migration required.
+
+## Deployment-time verification
+
+Real provider calls, browser rendering through the production proxy, Keycloak session behavior and
+Coolify rollout remain deployment-time checks.

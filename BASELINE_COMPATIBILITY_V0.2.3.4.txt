@@ -1,0 +1,27 @@
+RegHub v0.2.3.4 Baseline Compatibility Report
+Baseline: v0.2.3.3
+
+Missing baseline source files: 0
+
+Added source files: 6
+  ADDED BASELINE_COMPATIBILITY_V0.2.3.4.txt
+  ADDED RELEASE_MANIFEST_V0.2.3.4.md
+  ADDED RELEASE_VERIFICATION_V0.2.3.4.txt
+  ADDED docs/29_V0.2.3.4_IMPORT_EXPERIENCE_HOTFIX.md
+  ADDED docs/30_V0.2.3.4_UPGRADE.md
+  ADDED tests/test_v0234_import_experience_hotfix.py
+
+Changed existing source files: 10
+  CHANGED AUDIT_REPORT.md
+  CHANGED CHANGELOG.md
+  CHANGED README.md
+  CHANGED app/admin/views.py
+  CHANGED app/api/v1/catalog.py
+  CHANGED app/main.py
+  CHANGED app/operations/service.py
+  CHANGED pyproject.toml
+  CHANGED templates/operation_detail.html
+  CHANGED templates/reghub_layout.html
+
+Database migration added: 0
+Existing runtime/database/API features removed: 0

@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.2.3.3 Settings Action & UI Responsiveness Hotfix**
+Current release: **v0.2.3.4 Import Experience Hotfix**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -13,6 +13,16 @@ deploy user projects.
 - Deployment: `ygit.net`
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
+
+## v0.2.3.4 hotfix
+
+All v0.2.3.3 Settings, Operations, API access, registry, Keycloak, and database behavior is preserved.
+
+- Added a View Template action beside live progress after a successful import or single-template sync.
+- Rebuilt the operation-side panel as a responsive template result card with thumbnail, title, description, provider, category, framework, slug, quality, status, and source links.
+- Duplicate repository imports now finish as **Already found / Skipped**, never as a failure.
+- Added **Continue to update template**, which starts the existing source-sync workflow and preserves curated fields.
+- Added no database migration and removed no existing route, feature, setting, token, record, or operation history.
 
 ## v0.2.3.3 hotfix
 
@@ -118,4 +128,4 @@ GET /api/v1/ready
 5. The entrypoint runs `alembic upgrade head` and `python -m scripts.seed` automatically.
 6. Verify health, readiness, tag filtering, Operations, and Settings.
 
-See `docs/27_V0.2.3.3_SETTINGS_ACTION_HOTFIX.md` and `docs/28_V0.2.3.3_UPGRADE.md`.
+See `docs/29_V0.2.3.4_IMPORT_EXPERIENCE_HOTFIX.md` and `docs/30_V0.2.3.4_UPGRADE.md`.

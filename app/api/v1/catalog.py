@@ -249,7 +249,7 @@ async def capabilities(request: Request, response: Response):
     await _require_api(request, "api_catalog", "capabilities")
     _cache(response)
     return CapabilitiesRead(
-        version="0.2.3.3",
+        version="0.2.3.4",
         registry_adapters=[*container.adapter_names, "local-manifest", "local-zip"],
         framework_detection=[
             "astro",

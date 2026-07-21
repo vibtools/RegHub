@@ -1,0 +1,26 @@
+RegHub v0.2.3.4 Release Verification
+Baseline: v0.2.3.3
+
+Automated tests: PASS - 96 passed
+Application statement coverage: 72%
+Ruff lint: PASS
+Ruff formatting: PASS
+Python compileall: PASS
+Operation-detail JavaScript syntax: PASS
+Jinja/admin operation rendering regression: PASS
+Duplicate import Already found / Skipped behavior: PASS
+Continue-to-update operation creation and ancestry: PASS
+Single-template sync result context: PASS
+Template summary/status endpoint: PASS
+PostgreSQL Alembic offline upgrade through head: PASS
+Dependency integrity (pip check): PASS
+Wheel and source distribution build: PASS
+Committed .env/private-key scan: PASS
+Database migration required: NO
+Baseline source files removed: 0
+
+Deployment-time verification still required:
+- Real GitHub/GitLab/Bitbucket provider calls through production credentials
+- Browser rendering and SSE/polling behavior through the Coolify proxy
+- Keycloak login/logout and production session behavior
+- PostgreSQL backup and live rollout/rollback readiness
