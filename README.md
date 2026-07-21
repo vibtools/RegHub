@@ -1,10 +1,10 @@
 # RegHub
 
-Current release: **v0.2.0 Smart Registry**
+Current release: **v0.2.1 Stabilization, Provider & Media Fix**
 
-RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template
-metadata, manages publication, and serves a stable read-only API to `ygit.net`. RegHub does
-**not** build or deploy user projects.
+RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
+manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
+deploy user projects.
 
 ## Fixed service boundaries
 
@@ -14,29 +14,31 @@ metadata, manages publication, and serves a stable read-only API to `ygit.net`. 
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
 
-## v0.2 features
+## v0.2.1 features
 
-- OIDC-protected SQLAdmin panel
-- GitHub, GitLab, and Bitbucket metadata import without repository cloning
-- Local manifest and bounded ZIP inspection, disabled by default
-- Auto framework/version, language, package-manager, build command, and environment detection
-- Auto title, description, tags, category, difficulty, and use-case metadata
-- Optional OpenAI-compatible metadata enrichment
-- Repository screenshot discovery and optional isolated screenshot-service generation
-- Transparent quality score and breakdown
-- Draft, Published, and Disabled lifecycle
-- Source synchronization with version and sync history
-- Backward-compatible Manifest v1 and enhanced Manifest v2
-- Public read-only API for YGIT
+- All v0.2.0 Smart Registry features preserved
+- GitHub/GitLab/Bitbucket owner-based Provider auto-creation
+- Initial import and manual sync audit records with change summaries
+- Existing-template Sync History backfill migration
+- Recursive provider media discovery and README image detection
+- Manual Asset Gallery with add, edit, delete, ordering, and thumbnail selection
+- Tracked screenshot jobs with safe HTTPS validation and failure history
+- Manual and generated assets preserved during source synchronization
+- Public assets, freshness, change-feed, and facets API endpoints
+- Extended filters and sorting while preserving all existing v1 response contracts
+- ETag and Last-Modified headers for detail and manifest endpoints
 
 ## Security model
 
-RegHub only reads bounded text metadata through provider APIs or inspects ZIP entries in memory.
-It does not clone repositories, install packages, run builds, start templates, or execute uploaded
-code. ZIP traversal, symlinks, encryption, entry count, compressed size, and uncompressed size are
-validated. Local ZIP templates remain drafts until they have a deployable HTTPS repository.
+RegHub reads bounded metadata through provider APIs. It does not clone repositories, install
+packages, run builds, start templates, or execute uploaded code. Screenshot capture remains delegated
+to an isolated external service. Preview and screenshot URLs must be public HTTPS URLs. RegHub rejects credentials, custom ports,
+blocked hostnames, and literal private/reserved addresses; the isolated screenshot service must also
+enforce DNS-resolution and outbound-network restrictions.
 
 ## Public API
+
+Existing endpoints remain compatible:
 
 ```text
 GET /api/v1/templates
@@ -50,22 +52,30 @@ GET /api/v1/health
 GET /api/v1/ready
 ```
 
-Only Published templates are exposed.
+Additive v0.2.1 endpoints:
 
-## Local setup
-
-```bash
-cp .env.local.example .env
-docker compose -f compose.local.yml up --build
+```text
+GET /api/v1/templates/changes?updated_since=<ISO-8601>
+GET /api/v1/templates/{slug}/assets
+GET /api/v1/templates/{slug}/freshness
+GET /api/v1/facets
 ```
+
+Additional template filters:
+
+```text
+tag, language, difficulty, use_case, min_quality, updated_since, sort, order
+```
+
+Only Published templates are exposed.
 
 ## Coolify upgrade
 
 1. Take a PostgreSQL backup.
-2. Replace the project files, preserving `.git` and any local `.env`.
+2. Replace project files while preserving `.git` and any local `.env`.
 3. Commit and push to `main`.
 4. Redeploy in Coolify.
 5. The entrypoint runs `alembic upgrade head` and `python -m scripts.seed` automatically.
-6. Verify `/api/v1/health`, `/api/v1/ready`, `/api/v1/capabilities`, admin imports, and sync.
+6. Verify health, readiness, admin sync, providers, asset gallery, and public APIs.
 
-See `docs/13_V0.2.0_UPGRADE.md` and `docs/14_V0.2.0_ENVIRONMENT.md`.
+See `docs/15_V0.2.1_UPGRADE.md` and `docs/16_V0.2.1_API.md`.

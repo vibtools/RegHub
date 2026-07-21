@@ -13,6 +13,7 @@ from app.models import (  # noqa: F401
     Framework,
     ImportHistory,
     Provider,
+    ScreenshotJob,
     SyncHistory,
     Template,
     TemplateAsset,

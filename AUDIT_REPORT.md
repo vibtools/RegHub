@@ -1,47 +1,57 @@
-# RegHub v0.2.0 Production Readiness Audit
+# RegHub v0.2.1 Production Readiness Audit
 
-## Baseline and compatibility
+## Baseline and zero-freedom compatibility
 
-- Built from the running v0.1.1 replace-ready project.
-- No existing endpoint, OIDC route, admin CRUD section, status, migration, model field, or Docker
-  entrypoint was removed.
-- Manifest v1 remains valid; new imports use Manifest v2.
-- Database migration is additive.
+- Built from the running v0.2.0 Smart Registry release.
+- No existing endpoint, OIDC route, SQLAdmin section, status, model field, migration, manifest version,
+  Docker entrypoint, or registry/deployment boundary was removed.
+- Existing templates, IDs, slugs, publication states, curated metadata, manual assets, and API paths are
+  preserved.
+- Migration `20260721_0003` is additive.
+
+## Implemented fixes
+
+- Owner-derived Provider auto-create/update for GitHub, GitLab, and Bitbucket.
+- Initial-import Sync History rows plus backfill for historical templates without sync records.
+- Manual sync requester, trigger, status, revision, metadata, error, and changed-field persistence.
+- Recursive media scan, README image extraction, deduplication, bounded traversal, and source-safe URLs.
+- Manual Asset Gallery and preservation of manual/generated assets during sync.
+- Screenshot jobs with status, attempts, retry action, result, error, metadata, and public-HTTPS safety validation.
+- Public asset, freshness, change-feed, facets, filter, sorting, ETag, and Last-Modified support.
 
 ## Security controls
 
 - Repository clone/install/build/execution remains prohibited.
-- Provider URLs require HTTPS, reject credentials, custom ports, query strings, fragments, and
-  provider web-route URLs.
-- Provider text metadata reads are bounded.
-- GitHub PAT, GitLab token, Bitbucket app password, AI key, and screenshot token are never stored in
-  registry metadata.
-- Local ZIP checks include path traversal, symbolic links, encrypted entries, compressed size,
-  uncompressed size, entry count, and bounded text reads.
-- Local ZIP templates cannot be published until assigned a deployable HTTPS repository.
-- Screenshot generation is delegated to an optional isolated external service.
-- Imports remain Draft-only and publication remains an explicit administrator action.
+- Provider metadata and recursive tree reads are bounded.
+- Screenshot preview/result URLs require HTTPS and reject credentials, nonstandard ports, blocked
+  hostnames, and literal private/loopback/link-local/reserved/multicast addresses. The isolated screenshot
+  service must separately enforce DNS-resolution and outbound-network restrictions.
+- Provider credentials and screenshot tokens are never stored in registry records.
+- Imports remain Draft-only; publication remains an explicit administrator action.
 
 ## Automated verification
 
 - Python compilation: PASS
-- Ruff formatting/lint: PASS
-- Automated tests: 59 passed
-- SQLAdmin Template list/filter regression: PASS
-- Framework/version/package-manager detection: PASS
-- Metadata, environment, score, and category analysis: PASS
-- Manifest v1/v2 compatibility: PASS
-- GitHub/GitLab/Bitbucket URL validation: PASS
-- Safe local manifest/ZIP processing: PASS
-- Smart import and source-sync persistence: PASS
-- Curated identity and publication status preservation during sync: PASS
-- Alembic offline PostgreSQL SQL generation through v0.2: PASS
+- Ruff lint/format: PASS
+- Automated tests: **69 passed**
+- Application-code coverage: **64%**
+- Provider auto-create and update: PASS
+- Initial and manual Sync History persistence: PASS
+- Manual asset add/edit/delete and synchronization preservation: PASS
+- Screenshot job persistence, retry, and URL security: PASS
+- Recursive/README media analysis: PASS
+- Public filters, assets, freshness, facets, and change feed: PASS
+- ETag/Last-Modified and conditional 304 behavior: PASS
+- FastAPI route smoke test: PASS
+- SQLAdmin legacy regression tests: PASS
+- Alembic offline PostgreSQL SQL generation through v0.2.1: PASS
+- Package wheel build: PASS
 
 ## Deployment-time verification still required
 
-- Real Coolify Docker image build/start
-- Live PostgreSQL migration and backup
+- Real Coolify image build and startup
+- Live PostgreSQL migration and backup confirmation
 - Keycloak callback/logout after redeployment
-- Live provider API calls with production credentials
-- Optional AI/screenshot service behavior if enabled
-- End-to-end YGIT consumption of Manifest v2
+- Live GitHub/GitLab/Bitbucket provider requests
+- Optional external screenshot-service contract, DNS/egress restrictions, and storage availability
+- End-to-end YGIT consumption of assets/freshness/change-feed APIs
