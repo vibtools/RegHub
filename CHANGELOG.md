@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.3.1.1 — Final Stabilization Hotfix
+
+### Repository finalization
+
+- Removed the tracked build/distribution trees and stale duplicate `build/lib/app` runtime source.
+- Removed generated compatibility, inventory and verification reports from source tracking.
+- Removed unused Cloudflare, Coolify and Docker placeholder integration files.
+
+### Historical data consistency
+
+- Added data-only migration `20260722_0008_final_stabilization_hotfix`.
+- Normalized template analysis, version snapshots and import-history analysis to the registry-only
+  quality/evidence structure.
+- Removed historical build/start/deploy/environment and deployment-readiness analyzer fields.
+- Preserved valid registry metadata and administrator-curated manifests.
+
+### Compatibility
+
+- Added no feature, endpoint, table, column, service, integration, provider, Setting, administrator
+  page, dependency or deployment step.
+- Kept the Dockerfile, CI workflow, entrypoint and Coolify deployment process unchanged.
+
 ## v0.3.1.0 — Architecture Stabilization Release
 
 ### Security

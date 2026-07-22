@@ -1,3 +1,14 @@
+# RegHub v0.3.1.1 Final Stabilization Hotfix Audit
+
+- Baseline: v0.3.1.0 release commit.
+- Classification: final stabilization hotfix; no feature or architecture work.
+- Repository: stale `build/`/`dist/`, generated root reports and dead placeholder integrations removed.
+- Database: data-only migration `20260722_0008` normalizes current and historical analysis JSON.
+- Registry analysis: framework, language, package manager, license, README, topics and repository
+  metadata remain unchanged.
+- Public API, admin, OIDC, publication, import, sync, assets and manifests: unchanged.
+- Dockerfile, GitHub Actions, entrypoint and Coolify deployment workflow: unchanged.
+
 # RegHub v0.3.1.0 Architecture Stabilization Audit
 
 - Baseline: v0.3.0.3 replace-ready source plus the current main-branch Ruff-only formatting commit.

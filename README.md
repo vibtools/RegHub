@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.3.1.0 Architecture Stabilization Release**
+Current release: **v0.3.1.1 Final Stabilization Hotfix**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -13,6 +13,21 @@ deploy user projects.
 - Deployment: `ygit.net`
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
+
+## v0.3.1.1 final stabilization hotfix
+
+This release completes only the unfinished repository and historical-data cleanup identified after
+v0.3.1.0. It adds no feature, API, table, column, service, integration, Setting or deployment change.
+
+- Removes the stale tracked `build/lib/app` application and all tracked build/distribution output.
+- Removes generated compatibility, inventory and verification artifacts from source tracking.
+- Removes unused Cloudflare, Coolify and Docker placeholder integration files.
+- Adds automatic data-only migration `20260722_0008_final_stabilization_hotfix`.
+- Normalizes historical analysis quality/evidence to the same registry-only structure used by new
+  imports and synchronizations.
+- Preserves framework, language, package manager, license, README, topics and repository metadata.
+- Keeps public API, admin, OIDC, publishing, import, sync, assets, manifests, Docker, CI and Coolify
+  behavior unchanged.
 
 ## v0.3.1.0 architecture stabilization
 
@@ -182,5 +197,6 @@ GET /api/v1/ready
 5. The entrypoint runs `alembic upgrade head` and `python -m scripts.seed` automatically.
 6. Verify health, readiness, tag filtering, Operations, and Settings.
 
-See `docs/39_V0.3.1.0_ARCHITECTURE_STABILIZATION.md`,
-`docs/40_V0.3.1.0_UPGRADE.md`, and `docs/41_V0.3.1.0_AUDIT_SUMMARY.md`.
+See `docs/42_V0.3.1.1_FINAL_STABILIZATION_HOTFIX.md`,
+`docs/43_V0.3.1.1_UPGRADE.md`, `docs/44_V0.3.1.1_COMPATIBILITY_REPORT.md`,
+and `docs/45_V0.3.1.1_VALIDATION_REPORT.md`.
