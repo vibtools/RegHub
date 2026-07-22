@@ -20,12 +20,14 @@ async def ready(request: Request, session: DatabaseSession):
     payload: dict[str, object] = {
         "status": "ready",
         "database": "ok",
-        "operation_backend": container.settings.operation_backend,
+        "operation_backend": container.operation_runner.effective_backend,
+        "redis_worker_enabled": container.operation_runner.redis_worker_enabled,
+        "redis_configured": container.operation_runner.redis_configured,
         "operation_worker": worker_status or "not-configured",
         "cache_backend": container.catalog_cache.backend_name,
         "rate_limit_backend": container.rate_limiter.backend_name,
     }
-    if container.settings.operation_backend == "redis" and not worker_status:
+    if container.operation_runner.redis_worker_enabled and not worker_status:
         payload["status"] = "degraded"
         payload["operation_worker"] = "heartbeat-missing"
         return JSONResponse(payload, status_code=503)

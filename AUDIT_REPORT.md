@@ -1,3 +1,12 @@
+# RegHub v0.3.0.1 Hotfix Audit
+
+- Baseline: v0.3.0 replace-ready source.
+- Governance page shared-layout regression: corrected.
+- Redis worker runtime feature control: added with connectivity and heartbeat validation.
+- Existing queued Redis operations drain after switch-off; new operations use in-process execution.
+- Database migration: none.
+- Existing source files removed: none.
+
 # RegHub v0.3.0 Master Production Audit
 
 ## Baseline integrity

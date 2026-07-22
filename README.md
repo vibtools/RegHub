@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.3.0 Production Infrastructure & Governance**
+Current release: **v0.3.0.1 Governance UI & Redis Worker Control Hotfix**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -13,6 +13,20 @@ deploy user projects.
 - Deployment: `ygit.net`
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
+
+## v0.3.0.1 governance and worker-control hotfix
+
+All v0.3.0 APIs, RBAC, audit records, Settings, Operations, templates, migrations, and deployment
+boundaries remain compatible.
+
+- Repaired `/admin/governance` by rendering it through the shared full-width responsive admin block.
+- Rebuilt governance posture into responsive status tiles, bounded cards, wrapped proxy/key values,
+  and a readable audit summary.
+- Added **Redis Operation Worker** to Settings → Project feature control.
+- OFF keeps new operations in the existing in-process runner. ON routes new operations to Redis only
+  after Redis connectivity and a healthy standalone-worker heartbeat are verified.
+- Disabling the switch drains already queued Redis operations so administrator actions are not stranded.
+- No database migration or existing route removal is required.
 
 ## v0.3.0 production infrastructure and governance
 

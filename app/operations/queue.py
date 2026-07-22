@@ -99,12 +99,15 @@ class RedisOperationQueue:
             ex=max(60, min(300, self.lock_ttl_seconds // 3)),
         )
 
+    async def depth(self) -> int:
+        if self._redis is None:
+            return 0
+        return int(await self._redis.llen(self.queue_name))
+
     async def worker_status(self) -> dict[str, Any] | None:
         if self._redis is None:
             return None
-        raw, depth = await self._redis.get(self.heartbeat_key), await self._redis.llen(
-            self.queue_name
-        )
+        raw, depth = await self._redis.get(self.heartbeat_key), await self.depth()
         if not raw:
             return None
         try:

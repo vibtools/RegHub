@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0.1 - 2026-07-22
+
+- Fixed the Governance custom page layout by using the shared responsive SQLAdmin content block.
+- Added responsive governance posture tiles, bounded infrastructure/authorization cards, and readable
+  audit-chain status.
+- Added a runtime **Redis Operation Worker** feature switch under Project feature control.
+- Added safe activation checks for `REDIS_URL`, Redis connectivity, and standalone-worker heartbeat.
+- Kept OFF mode on the in-process runner and made disabled workers drain already queued durable jobs.
+- Updated readiness and capabilities to report the effective operation backend.
+- Added no migration and removed no existing feature, route, record, token, role, or deployment behavior.
+
 ## 0.3.0 - 2026-07-21
 
 ### Production infrastructure

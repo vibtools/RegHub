@@ -1046,6 +1046,9 @@ class GovernanceView(_AdminBaseView):
                 "audit_verification": verification,
                 "worker_status": worker_status,
                 "operation_backend": settings.operation_backend,
+                "effective_operation_backend": container.operation_runner.effective_backend,
+                "redis_worker_enabled": container.operation_runner.redis_worker_enabled,
+                "redis_configured": container.operation_runner.redis_configured,
                 "cache_backend": container.catalog_cache.backend_name,
                 "rate_limit_backend": container.rate_limiter.backend_name,
                 "trusted_proxy_networks": settings.trusted_proxy_networks,
@@ -1093,18 +1096,32 @@ class SettingsView(_AdminBaseView):
                 identity = request.state.admin_identity.subject
                 if action_name == "save_features":
                     features = await container.runtime_settings.feature_rows()
+                    feature_updates = {
+                        item.key: (
+                            self._bool(form, f"enabled__{item.key}"),
+                            self._bool(form, f"task__{item.key}"),
+                        )
+                        for item in features
+                    }
+                    current_redis_worker = next(
+                        (item.enabled for item in features if item.key == "redis_worker"), False
+                    )
+                    requested_redis_worker = feature_updates.get(
+                        "redis_worker", (False, True)
+                    )[0]
+                    # Enabling the durable queue is safe only after both Redis and the
+                    # standalone worker are genuinely available. Validate before the
+                    # database mutation so a failed activation never leaves a misleading
+                    # ON state in Settings.
+                    if requested_redis_worker and not current_redis_worker:
+                        await container.operation_runner.validate_redis_worker_activation()
                     await container.runtime_settings.update_features_bulk(
-                        {
-                            item.key: (
-                                self._bool(form, f"enabled__{item.key}"),
-                                self._bool(form, f"task__{item.key}"),
-                            )
-                            for item in features
-                        },
+                        feature_updates,
                         updated_by=identity,
                     )
                     await container.reload_runtime()
-                    success = "Feature controls updated immediately. No redeploy was required."
+                    await container.apply_runtime_infrastructure()
+                    success = "Feature controls updated immediately. No web redeploy was required."
                 elif action_name == "save_integration":
                     raw_config = str(form.get("config_json", "{}")).strip() or "{}"
                     config = json.loads(raw_config)
@@ -1133,6 +1150,7 @@ class SettingsView(_AdminBaseView):
                     success = "Integration runtime configuration removed or disabled."
                 elif action_name == "reload_runtime":
                     await container.reload_runtime()
+                    await container.apply_runtime_infrastructure()
                     success = "Runtime configuration reloaded."
                 elif action_name == "save_api_mode":
                     if api_access is None:

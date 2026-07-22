@@ -138,6 +138,16 @@ class RuntimeSettingsService:
                 True,
             ),
             FeatureDefinition(
+                "redis_worker",
+                "Redis Operation Worker",
+                "Operations",
+                "Route new administrator operations to the durable Redis worker. "
+                "Requires REDIS_URL and a healthy standalone worker service; OFF safely "
+                "keeps in-process execution.",
+                settings.operation_backend == "redis",
+                True,
+            ),
+            FeatureDefinition(
                 "github_import",
                 "GitHub Import",
                 "Imports",

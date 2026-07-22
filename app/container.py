@@ -73,7 +73,10 @@ class ApplicationContainer:
         await self.catalog_cache.initialize()
         await self.rate_limiter.initialize()
         await self.reload_runtime()
-        await self.operation_runner.initialize(worker_process=worker_process)
+        await self.operation_runner.initialize(
+            worker_process=worker_process,
+            redis_worker_enabled=self.feature_enabled("redis_worker"),
+        )
 
     def feature_enabled(self, key: str, *, task: bool = False) -> bool:
         return self.runtime_settings.feature_enabled(key, task=task)
@@ -89,6 +92,20 @@ class ApplicationContainer:
         except (TypeError, ValueError):
             return default
         return max(minimum, min(parsed, maximum))
+
+    async def apply_runtime_infrastructure(
+        self, *, verify_redis_worker: bool = False
+    ) -> None:
+        """Apply runtime infrastructure switches without rebuilding the application.
+
+        Redis itself and the standalone worker remain deployment infrastructure. Once
+        they are provisioned, the Settings feature flag can safely move new operations
+        between the web process and the durable queue without a web redeploy.
+        """
+        await self.operation_runner.set_redis_worker_enabled(
+            self.feature_enabled("redis_worker"),
+            verify_worker=verify_redis_worker,
+        )
 
     async def reload_runtime(self, *, preserve_inflight: bool = True) -> None:
         await self.runtime_settings.reload()

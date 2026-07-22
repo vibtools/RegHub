@@ -389,12 +389,18 @@ class OperationRunner:
         poll_seconds: float = 1.0,
     ) -> None:
         self.service = service
+        # ``backend`` remains the deployment-time compatibility default. The effective
+        # backend is controlled by the runtime ``redis_worker`` feature flag. This lets
+        # an operator provision Redis and a standby worker once, then switch durable
+        # processing on or off from Settings without replacing the web application.
         self.backend = backend
         self._container: ApplicationContainer | None = None
         self._tasks: dict[UUID, asyncio.Task[None]] = {}
         self._shutting_down = False
         self._worker_process = False
         self._worker_id = f"worker-{uuid4()}"
+        self._redis_worker_enabled = backend == "redis"
+        self._queue_initialized = False
         self._queue = (
             RedisOperationQueue(
                 redis_url,
@@ -402,7 +408,7 @@ class OperationRunner:
                 lock_ttl_seconds=lock_ttl_seconds,
                 poll_seconds=poll_seconds,
             )
-            if backend == "redis" and redis_url
+            if redis_url
             else None
         )
         self.lock_ttl_seconds = lock_ttl_seconds
@@ -410,21 +416,79 @@ class OperationRunner:
     def bind(self, container: "ApplicationContainer") -> None:
         self._container = container
 
-    async def initialize(self, *, worker_process: bool = False) -> None:
+    @property
+    def redis_configured(self) -> bool:
+        return self._queue is not None
+
+    @property
+    def redis_worker_enabled(self) -> bool:
+        return self._redis_worker_enabled
+
+    @property
+    def effective_backend(self) -> str:
+        return "redis" if self._redis_worker_enabled and self._queue_initialized else "inprocess"
+
+    async def _ensure_queue(self) -> None:
+        if self._queue is None:
+            raise ValidationError(
+                "Redis worker is not configured. Set REDIS_URL and deploy the "
+                "standalone worker first."
+            )
+        if not self._queue_initialized:
+            try:
+                await self._queue.initialize()
+            except Exception as exc:
+                raise ValidationError(
+                    f"Redis worker connection failed: {exc.__class__.__name__}: {exc}"
+                ) from exc
+            self._queue_initialized = True
+
+    async def validate_redis_worker_activation(self) -> dict[str, Any]:
+        await self._ensure_queue()
+        assert self._queue is not None
+        status = await self._queue.worker_status()
+        if not status:
+            raise ValidationError(
+                "Redis is reachable, but no standalone RegHub worker heartbeat was found. "
+                "Start the worker service before enabling this switch."
+            )
+        return status
+
+    async def set_redis_worker_enabled(
+        self, enabled: bool, *, verify_worker: bool = False
+    ) -> None:
+        if enabled:
+            if verify_worker:
+                await self.validate_redis_worker_activation()
+            else:
+                await self._ensure_queue()
+        self._redis_worker_enabled = bool(enabled)
+
+    async def initialize(
+        self, *, worker_process: bool = False, redis_worker_enabled: bool | None = None
+    ) -> None:
         self._worker_process = worker_process
-        if self._queue is not None:
-            await self._queue.initialize()
-            if worker_process:
+        if redis_worker_enabled is not None:
+            self._redis_worker_enabled = bool(redis_worker_enabled)
+        if worker_process:
+            await self._ensure_queue()
+            if self._redis_worker_enabled:
+                assert self._queue is not None
                 for operation_id in await self.service.recover(
                     stale_after_seconds=self.lock_ttl_seconds
                 ):
                     await self._queue.enqueue(operation_id)
             return
+        if self._redis_worker_enabled:
+            await self._ensure_queue()
+            return
         for operation_id in await self.service.recover():
             await self.enqueue(operation_id)
 
     async def enqueue(self, operation_id: UUID) -> None:
-        if self._queue is not None:
+        if self._redis_worker_enabled:
+            await self._ensure_queue()
+            assert self._queue is not None
             await self._queue.enqueue(operation_id)
             return
         task = self._tasks.get(operation_id)
@@ -450,14 +514,28 @@ class OperationRunner:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
-        if self._queue is not None:
+        if self._queue is not None and self._queue_initialized:
             await self._queue.close()
+            self._queue_initialized = False
 
     async def worker_status(self) -> dict[str, Any] | None:
-        if self._queue is None:
-            return {"backend": "inprocess", "worker": "web-process", "queue_depth": 0}
+        if not self._redis_worker_enabled:
+            return {
+                "backend": "inprocess",
+                "worker": "web-process",
+                "queue_depth": 0,
+                "redis_configured": self.redis_configured,
+                "redis_worker_enabled": False,
+            }
+        if self._queue is None or not self._queue_initialized:
+            return None
         try:
-            return await self._queue.worker_status()
+            value = await self._queue.worker_status()
+            return (
+                {**value, "redis_worker_enabled": True, "redis_configured": True}
+                if value
+                else None
+            )
         except Exception:
             logger.exception("Unable to read Redis operation worker status")
             return None
@@ -498,11 +576,45 @@ class OperationRunner:
 
     async def run_forever(self) -> None:
         if self._queue is None:
-            raise RuntimeError("The standalone worker requires OPERATION_BACKEND=redis")
+            raise RuntimeError("The standalone worker requires REDIS_URL")
+        await self._ensure_queue()
         next_reconcile = 0.0
+        next_feature_refresh = 0.0
         while not self._shutting_down:
             now = time.monotonic()
-            if now >= next_reconcile:
+            if now >= next_feature_refresh and self._container is not None:
+                await self._container.runtime_settings.reload()
+                self._redis_worker_enabled = self._container.feature_enabled("redis_worker")
+                next_feature_refresh = now + 5.0
+            if not self._redis_worker_enabled:
+                queued_depth = await self._queue.depth()
+                if queued_depth <= 0:
+                    await self._queue.heartbeat(
+                        self._worker_id,
+                        {
+                            "backend": "redis",
+                            "status": "standby",
+                            "runtime_enabled": False,
+                            "queue_depth": 0,
+                            "timestamp": datetime.now(UTC).isoformat(),
+                        },
+                    )
+                    await asyncio.sleep(max(0.5, self._queue.poll_seconds))
+                    continue
+                # Disabling the switch routes all *new* operations back to the web
+                # process. Already queued durable jobs are drained so no administrator
+                # action is stranded in QUEUED state.
+                await self._queue.heartbeat(
+                    self._worker_id,
+                    {
+                        "backend": "redis",
+                        "status": "draining",
+                        "runtime_enabled": False,
+                        "queue_depth": queued_depth,
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    },
+                )
+            if self._redis_worker_enabled and now >= next_reconcile:
                 for queued_id in await self.service.recover(
                     stale_after_seconds=self.lock_ttl_seconds
                 ):
@@ -510,7 +622,12 @@ class OperationRunner:
                 next_reconcile = now + 60.0
             await self._queue.heartbeat(
                 self._worker_id,
-                {"backend": "redis", "status": "idle", "timestamp": datetime.now(UTC).isoformat()},
+                {
+                    "backend": "redis",
+                    "status": "idle" if self._redis_worker_enabled else "draining",
+                    "runtime_enabled": self._redis_worker_enabled,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
             )
             operation_id = await self._queue.dequeue()
             if operation_id is None:
@@ -546,7 +663,7 @@ class OperationRunner:
         await self.service.append_log(
             operation_id, message, level=level, data=data, progress=progress
         )
-        if self._queue is not None:
+        if self._worker_process and self._queue is not None and self._queue_initialized:
             await self._queue.refresh_lock(operation_id, self._worker_id)
             await self._queue.heartbeat(
                 self._worker_id,

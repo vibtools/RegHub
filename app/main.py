@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RegHub API",
-    version="0.3.0",
+    version="0.3.0.1",
     description="Smart template registry API for YGIT",
     debug=settings.app_debug,
     lifespan=lifespan,

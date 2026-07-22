@@ -1,64 +1,128 @@
 {% extends "reghub_layout.html" %}
-{% block content %}
-<div class="col-12 reghub-page">
-  <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+{% block reghub_content %}
+<div class="reghub-section-stack">
+  <div class="reghub-toolbar">
     <div>
-      <h2 class="mb-1">Production Governance</h2>
-      <p class="text-secondary mb-0">Runtime infrastructure, administrator roles and immutable audit-chain status.</p>
+      <h2 class="page-title mb-1">Production Governance</h2>
+      <div class="text-secondary">Infrastructure posture, administrator authorization, and immutable audit status.</div>
     </div>
     {% if audit_verification.valid %}
-      <span class="badge bg-success-lt text-success fs-6">Audit chain verified</span>
+      <span class="badge bg-success-lt text-success fs-6"><i class="fa-solid fa-shield-check me-1"></i>Audit chain verified</span>
     {% else %}
-      <span class="badge bg-danger-lt text-danger fs-6">Audit chain validation failed</span>
+      <span class="badge bg-danger-lt text-danger fs-6"><i class="fa-solid fa-triangle-exclamation me-1"></i>Audit validation failed</span>
     {% endif %}
   </div>
 
   {% if "*" in trusted_proxy_networks or not dedicated_runtime_key or not dedicated_audit_key %}
-  <div class="alert alert-warning" role="alert">
-    <strong>Production hardening remains:</strong>
-    {% if "*" in trusted_proxy_networks %}replace wildcard trusted proxies with Coolify proxy CIDRs; {% endif %}
-    {% if not dedicated_runtime_key %}set a dedicated runtime encryption key; {% endif %}
-    {% if not dedicated_audit_key %}set a dedicated audit signing key.{% endif %}
+  <div class="alert alert-warning mb-0" role="alert">
+    <div class="d-flex align-items-start gap-2">
+      <i class="fa-solid fa-shield-halved mt-1"></i>
+      <div>
+        <strong>Production hardening remains</strong>
+        <ul class="mb-0 mt-1 ps-3">
+          {% if "*" in trusted_proxy_networks %}<li>Replace wildcard trusted proxies with the Coolify proxy CIDRs.</li>{% endif %}
+          {% if not dedicated_runtime_key %}<li>Configure a dedicated runtime encryption key.</li>{% endif %}
+          {% if not dedicated_audit_key %}<li>Configure a dedicated audit-signing key.</li>{% endif %}
+        </ul>
+      </div>
+    </div>
   </div>
   {% endif %}
 
-  <div class="row row-cards">
-    <div class="col-12 col-lg-6">
+  <div class="reghub-status-grid">
+    <div class="reghub-status-tile">
+      <div class="text-secondary small">Effective operation backend</div>
+      <div class="h3 mb-1 text-capitalize">{{ effective_operation_backend }}</div>
+      <div class="small text-secondary">Redis worker {{ "enabled" if redis_worker_enabled else "disabled" }}</div>
+    </div>
+    <div class="reghub-status-tile">
+      <div class="text-secondary small">Worker availability</div>
+      <div class="h3 mb-1">
+        {% if redis_worker_enabled and worker_status %}Online{% elif redis_worker_enabled %}Unavailable{% else %}Standby{% endif %}
+      </div>
+      <div class="small text-secondary">Redis {{ "configured" if redis_configured else "not configured" }}</div>
+    </div>
+    <div class="reghub-status-tile">
+      <div class="text-secondary small">Audit chain</div>
+      <div class="h3 mb-1">{{ audit_verification.checked }}/{{ audit_verification.total }}</div>
+      <div class="small text-secondary">{{ "Verified" if audit_verification.valid else "Attention required" }}</div>
+    </div>
+    <div class="reghub-status-tile">
+      <div class="text-secondary small">Administrator roles</div>
+      <div class="h3 mb-1">{{ identity.roles|length }}</div>
+      <div class="small text-secondary">{{ permissions|length }} effective permissions</div>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-xl-7">
       <div class="card h-100">
         <div class="card-header"><h3 class="card-title">Infrastructure posture</h3></div>
         <div class="table-responsive">
-          <table class="table table-vcenter card-table">
+          <table class="table table-vcenter card-table reghub-governance-table">
             <tbody>
-              <tr><td>Operation backend</td><td><code>{{ operation_backend }}</code></td></tr>
-              <tr><td>Worker status</td><td><code>{{ worker_status or "No Redis worker heartbeat" }}</code></td></tr>
+              <tr><td>Configured operation mode</td><td><code>{{ operation_backend }}</code></td></tr>
+              <tr><td>Effective operation mode</td><td><code>{{ effective_operation_backend }}</code></td></tr>
+              <tr><td>Redis worker switch</td><td><span class="badge bg-{{ 'green' if redis_worker_enabled else 'secondary' }}-lt">{{ 'ON' if redis_worker_enabled else 'OFF' }}</span></td></tr>
+              <tr><td>Redis connection</td><td>{{ "Configured" if redis_configured else "Not configured" }}</td></tr>
+              <tr>
+                <td>Worker heartbeat</td>
+                <td>
+                  {% if redis_worker_enabled and worker_status %}
+                    <span class="badge bg-success-lt text-success">Online</span>
+                    {% if worker_status.queue_depth is defined %}<span class="text-secondary ms-2">Queue: {{ worker_status.queue_depth }}</span>{% endif %}
+                  {% elif redis_worker_enabled %}
+                    <span class="badge bg-danger-lt text-danger">Missing</span>
+                  {% else %}
+                    <span class="badge bg-secondary-lt">Not required</span>
+                  {% endif %}
+                </td>
+              </tr>
               <tr><td>Catalog cache</td><td><code>{{ cache_backend }}</code></td></tr>
               <tr><td>Rate limiting</td><td><code>{{ rate_limit_backend }}</code></td></tr>
-              <tr><td>Trusted proxies</td><td><code>{{ trusted_proxy_networks|join(", ") }}</code></td></tr>
-              <tr><td>Runtime key</td><td>{{ "Dedicated" if dedicated_runtime_key else "Legacy SESSION_SECRET fallback" }} <code>{{ primary_runtime_key_id }}</code></td></tr>
+              <tr><td>Trusted proxies</td><td><code class="reghub-wrap">{{ trusted_proxy_networks|join(", ") }}</code></td></tr>
+              <tr><td>Runtime key</td><td>{{ "Dedicated" if dedicated_runtime_key else "SESSION_SECRET fallback" }} <code>{{ primary_runtime_key_id }}</code></td></tr>
               <tr><td>Audit signing key</td><td>{{ "Dedicated" if dedicated_audit_key else "Fallback key" }} <code>{{ primary_audit_key_id }}</code></td></tr>
             </tbody>
           </table>
         </div>
       </div>
     </div>
-    <div class="col-12 col-lg-6">
+
+    <div class="col-12 col-xl-5">
       <div class="card h-100">
         <div class="card-header"><h3 class="card-title">Administrator authorization</h3></div>
         <div class="card-body">
-          <div class="mb-3"><span class="text-secondary">Subject</span><div><code>{{ identity.subject }}</code></div></div>
-          <div class="mb-3"><span class="text-secondary">Roles</span><div class="mt-1">{% for role in identity.roles %}<span class="badge bg-blue-lt me-1">{{ role }}</span>{% else %}<span class="text-danger">No roles</span>{% endfor %}</div></div>
-          <div><span class="text-secondary">Effective permissions</span><div class="mt-1">{% for permission in permissions %}<span class="badge bg-secondary-lt me-1 mb-1">{{ permission }}</span>{% endfor %}</div></div>
+          <dl class="row mb-0">
+            <dt class="col-sm-4 text-secondary">Subject</dt>
+            <dd class="col-sm-8"><code class="reghub-wrap">{{ identity.subject }}</code></dd>
+            <dt class="col-sm-4 text-secondary">Roles</dt>
+            <dd class="col-sm-8">
+              {% for role in identity.roles %}<span class="badge bg-blue-lt me-1 mb-1">{{ role }}</span>{% else %}<span class="text-danger">No roles</span>{% endfor %}
+            </dd>
+            <dt class="col-sm-4 text-secondary">Permissions</dt>
+            <dd class="col-sm-8">
+              <div class="d-flex flex-wrap gap-1">{% for permission in permissions %}<span class="badge bg-secondary-lt">{{ permission }}</span>{% endfor %}</div>
+            </dd>
+          </dl>
         </div>
       </div>
     </div>
+
     <div class="col-12">
       <div class="card">
-        <div class="card-header"><h3 class="card-title">Immutable audit trail</h3></div>
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <h3 class="card-title">Immutable audit trail</h3>
+          <a class="btn btn-outline-primary btn-sm" href="/admin/audit-event/list"><i class="fa-solid fa-list-check me-1"></i>Open Audit Trail</a>
+        </div>
         <div class="card-body">
-          <p class="mb-2">Checked <strong>{{ audit_verification.checked }}</strong> of <strong>{{ audit_verification.total }}</strong> chained event(s).</p>
-          {% if not audit_verification.complete %}<p class="text-warning mb-2">Verification is partial because the safety scan limit was reached.</p>{% endif %}
-          <p class="mb-0 {% if audit_verification.valid %}text-success{% else %}text-danger{% endif %}">{{ audit_verification.message }}</p>
-          <a class="btn btn-outline-primary mt-3" href="/admin/audit-event/list">Open Audit Trail</a>
+          <div class="row g-3 align-items-center">
+            <div class="col-12 col-md-3"><div class="text-secondary small">Events checked</div><div class="h2 mb-0">{{ audit_verification.checked }} / {{ audit_verification.total }}</div></div>
+            <div class="col-12 col-md-9">
+              {% if not audit_verification.complete %}<div class="alert alert-warning py-2 mb-2">Verification is partial because the safety scan limit was reached.</div>{% endif %}
+              <div class="{% if audit_verification.valid %}text-success{% else %}text-danger{% endif %}">{{ audit_verification.message }}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
