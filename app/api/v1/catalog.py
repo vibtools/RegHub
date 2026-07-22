@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query, Request, Response
 from pydantic import BaseModel, TypeAdapter
 from pydantic import ValidationError as PydanticValidationError
 
+from app import __version__
 from app.api.dependencies import DatabaseSession
 from app.core.config import get_settings
 from app.registry.category import CategoryService
@@ -384,7 +385,7 @@ async def capabilities(request: Request, response: Response):
         return cached
     _cache(response)
     result = CapabilitiesRead(
-        version="0.3.1.1",
+        version=__version__,
         registry_adapters=[*container.adapter_names, "local-manifest", "local-zip"],
         framework_detection=[
             "astro",

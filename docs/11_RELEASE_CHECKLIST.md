@@ -76,3 +76,29 @@
   aligns constraints and removes only redundant indexes/generated intelligence.
 - Historical generated report noise, caches, build and distribution directories are absent.
 - Existing GitHub Actions, Docker, entrypoint, seed and Coolify deployment behavior are unchanged.
+
+## v0.3.2.0 production-readiness checks
+
+- Version identity is `0.3.2.0` in package metadata and runtime/API responses.
+- Hidden delivery files are present: `.gitignore`, `.dockerignore`, `.env.example`, and production CI.
+- Production rejects example/default secrets and requires independent session, runtime-encryption,
+  and audit-signing keys.
+- Public, OIDC, AI, screenshot, and OIDC logout endpoints meet the documented HTTPS/origin rules.
+- Production allowed hosts and trusted proxy networks contain no wildcard; the public host is allowed.
+- Forwarded client/host/proto data is interpreted only from a configured proxy peer and malformed
+  chains are ignored.
+- Request IDs are bounded and safe before being copied into response headers.
+- Local manifests and ZIPs reject SSRF targets, embedded credentials, traversal, links, encryption,
+  duplicate/case-colliding names, excessive entries, and excessive expansion.
+- The runtime image imports RegHub from the installed wheel and does not shadow it with a copied
+  source tree.
+- The runtime image uses a non-root user; CI smoke runs it read-only with dropped capabilities,
+  `no-new-privileges`, and a bounded writable `/tmp` tmpfs.
+- Startup migration and seed execution is serialized by PostgreSQL advisory lock and has a timeout.
+- `python -m scripts.security_static_check`, `verify_release_tree`,
+  `verify_production_config`, and `verify_alembic_heads` pass.
+- Exactly one Alembic head exists and PostgreSQL migration/seed validation passes.
+- Installed third-party dependencies pass `pip check` and strict `pip-audit`; the private RegHub
+  distribution is the only excluded project package.
+- Full pytest coverage remains at least 70%, and both `quality-and-integration` and `docker-smoke`
+  GitHub Actions jobs are green before promotion.

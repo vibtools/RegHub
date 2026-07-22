@@ -10,3 +10,11 @@ tests
 build
 dist
 *.egg-info
+.coverage
+htmlcov
+*.db
+*.sqlite
+*.sqlite3
+release
+release_evidence
+*.zip

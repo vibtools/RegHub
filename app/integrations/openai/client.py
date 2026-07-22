@@ -9,6 +9,8 @@ from app.registry.adapters.base import ImportedRepository
 
 logger = logging.getLogger(__name__)
 
+_MAX_RESPONSE_BYTES = 1_000_000
+
 
 class AIMetadataEnricher:
     """Optional OpenAI-compatible enrichment. Failures never block registry imports."""
@@ -83,7 +85,9 @@ class AIMetadataEnricher:
             ],
         }
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(
+                timeout=self._timeout, follow_redirects=False
+            ) as client:
                 response = await client.post(
                     f"{self._base_url}/chat/completions",
                     headers={
@@ -93,6 +97,8 @@ class AIMetadataEnricher:
                     json=payload,
                 )
                 response.raise_for_status()
+                if len(response.content) > _MAX_RESPONSE_BYTES:
+                    raise ExternalServiceError("AI metadata response was too large")
                 content = response.json()["choices"][0]["message"]["content"]
                 result = json.loads(content)
             title = str(result.get("title") or analysis.title)[:160]

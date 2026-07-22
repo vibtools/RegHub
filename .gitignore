@@ -19,3 +19,10 @@ dist/
 BASELINE_COMPATIBILITY_V*.txt
 FILE_INVENTORY_V*.txt
 RELEASE_VERIFICATION_V*.txt
+
+# Local database and release-build output.
+*.db
+*.sqlite
+*.sqlite3
+release/
+release_evidence/

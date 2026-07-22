@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.3.2.0 — Production Readiness Release
+
+### Security
+
+- Enforced distinct dedicated production encryption and audit keys.
+- Validated public origin, hosts, proxies, database scheme and credential-bearing HTTPS endpoints.
+- Sanitized request IDs, forwarded metadata and local manifest/ZIP URLs and paths.
+
+### Runtime and release engineering
+
+- Removed Docker source-tree shadowing so production runs the installed wheel.
+- Added static security, release-tree and production-configuration gates.
+- Pinned GitHub Actions by commit and hardened the Docker smoke sandbox.
+- Added no public API route, schema object, Alembic revision or runtime dependency.
+
+## v0.3.1.2 — Forensic Release Hardening Hotfix
+
+### Security and startup
+
+- Production rejects the development session secret, non-HTTPS public/OIDC URLs and wildcard trusted
+  proxies.
+- Automatic migration and seed startup is serialized with a PostgreSQL advisory lock.
+- Docker health now validates application readiness instead of process-only liveness.
+
+### Release engineering
+
+- Added `pip check`, an exact single-Alembic-head gate and deterministic pinned dependency audit input.
+- Kept strict `pip-audit`; only the private `reghub` package is excluded from public-index lookup.
+- Added no API route, migration, schema object, runtime dependency or registry feature.
+
 ## v0.3.1.1 — Final Stabilization Hotfix
 
 ### Repository finalization

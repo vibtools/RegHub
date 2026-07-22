@@ -5,9 +5,9 @@ MIGRATION = ROOT / "migrations/versions/20260722_0008_final_stabilization_hotfix
 
 
 def test_release_version_is_consistent() -> None:
-    assert 'version = "0.3.1.1"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    assert 'version="0.3.1.1"' in (ROOT / "app/main.py").read_text(encoding="utf-8")
-    assert 'version="0.3.1.1"' in (ROOT / "app/api/v1/catalog.py").read_text(encoding="utf-8")
+    assert 'version = "0.3.2.0"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert "version=__version__" in (ROOT / "app/main.py").read_text(encoding="utf-8")
+    assert "version=__version__" in (ROOT / "app/api/v1/catalog.py").read_text(encoding="utf-8")
 
 
 def test_only_one_runtime_application_tree_exists() -> None:
@@ -71,10 +71,12 @@ def test_cleanup_migration_is_data_only_and_complete() -> None:
     assert "IS DISTINCT FROM" in upper
 
 
-def test_automatic_deployment_contract_is_unchanged() -> None:
+def test_automatic_deployment_contract_is_hardened() -> None:
     entrypoint = (ROOT / "scripts/entrypoint.sh").read_text(encoding="utf-8")
-    assert "alembic upgrade head" in entrypoint
-    assert "python -m scripts.seed" in entrypoint
+    startup = (ROOT / "scripts/startup.py").read_text(encoding="utf-8")
+    assert "python -m scripts.startup" in entrypoint
+    assert "alembic" in startup
+    assert "scripts.seed" in startup
     assert "uvicorn app.main:app" in entrypoint
     assert (ROOT / "Dockerfile").is_file()
     assert (ROOT / ".github/workflows/ci.yml").is_file()

@@ -65,6 +65,11 @@ Invoke-ReadOnlyValidation -Name 'Dependency integrity' -Executable 'python' -Arg
 Invoke-ReadOnlyValidation -Name 'Ruff lint' -Executable 'ruff' -Arguments @('check', '.') -TransientPatterns @()
 Invoke-ReadOnlyValidation -Name 'Ruff format check' -Executable 'ruff' -Arguments @('format', '--check', '.') -TransientPatterns @()
 Invoke-ReadOnlyValidation -Name 'Python compile' -Executable 'python' -Arguments @('-m', 'compileall', '-q', 'app', 'scripts', 'tests') -TransientPatterns @()
+Invoke-ReadOnlyValidation -Name 'Security static check' -Executable 'python' -Arguments @('-m', 'scripts.security_static_check') -TransientPatterns @()
+Invoke-ReadOnlyValidation -Name 'Release-tree integrity' -Executable 'python' -Arguments @('-m', 'scripts.verify_release_tree') -TransientPatterns @()
+Invoke-ReadOnlyValidation -Name 'Release-file manifest' -Executable 'python' -Arguments @('-m', 'scripts.verify_file_manifest') -TransientPatterns @()
+Invoke-ReadOnlyValidation -Name 'Production configuration' -Executable 'python' -Arguments @('-m', 'scripts.verify_production_config') -TransientPatterns @()
+Invoke-ReadOnlyValidation -Name 'Alembic single head' -Executable 'python' -Arguments @('-m', 'scripts.verify_alembic_heads') -TransientPatterns @()
 
 if ($IncludeCoverage) {
     Invoke-ReadOnlyValidation -Name 'Pytest with coverage' -Executable 'pytest' -Arguments @('--cov=app', '--cov-report=term-missing', '--cov-fail-under=70')

@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.3.1.1 Final Stabilization Hotfix**
+Current release: **v0.3.2.0 Production Readiness Release**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -13,6 +13,33 @@ deploy user projects.
 - Deployment: `ygit.net`
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
+
+## v0.3.2.0 production readiness release
+
+This release consolidates the v0.3.1.x stabilization work and closes forensic security and delivery
+gaps without adding an API route, database migration, provider, administrator page or registry
+feature.
+
+- Requires independent production session, runtime-encryption and audit-signing keys.
+- Validates production origins, hosts, proxy networks and credential-bearing HTTPS endpoints.
+- Sanitizes request identifiers, forwarding metadata and local manifest/ZIP input.
+- Runs the installed application wheel in Docker without a shadow runtime source tree.
+- Pins GitHub Actions by immutable commit and repeats security/release checks in CI.
+- Validates a non-root, read-only, capability-dropped container through `/api/v1/ready`.
+
+## v0.3.1.2 forensic release hardening hotfix
+
+This release adds no feature, API route, table, column, provider, administrator page or runtime
+dependency. It hardens production configuration, serializes automatic migration/seed startup across
+replicas, checks Docker readiness, and makes dependency auditing deterministic for the private RegHub
+package.
+
+- Rejects the known development session secret and wildcard proxy trust in production.
+- Requires HTTPS public and OIDC issuer URLs in production.
+- Adds PostgreSQL advisory-lock protection around automatic migration and seed startup.
+- Adds dependency consistency and single-Alembic-head CI gates.
+- Audits exact installed third-party versions while excluding only the private `reghub` distribution.
+- Uses `/api/v1/ready` for Docker and CI container health.
 
 ## v0.3.1.1 final stabilization hotfix
 

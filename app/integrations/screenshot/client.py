@@ -3,6 +3,7 @@ from typing import Any
 
 import httpx
 
+from app import __version__
 from app.core.exceptions import ExternalServiceError, ValidationError
 from app.core.url_security import validate_public_https_url
 
@@ -30,7 +31,7 @@ class ScreenshotService:
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "RegHub-Screenshot-Client/0.2.3",
+            "User-Agent": f"RegHub-Screenshot-Client/{__version__}",
         }
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"

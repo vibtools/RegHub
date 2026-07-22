@@ -1,3 +1,24 @@
+# RegHub v0.3.2.0 Production Readiness Forensic Audit
+
+- Baseline: supplied v0.3.2.0 current-baseline export from the v0.3.1.2 forensic branch.
+- Hidden delivery files omitted by the exporter were reconstructed from Git commit `f80a984`.
+- Public API routes, database schema, migration graph and registry/deployment ownership are preserved.
+- Production secrets, origins, hosts, proxies and optional service endpoints now fail closed.
+- Request/proxy/local-import trust boundaries received dedicated regression coverage.
+- Docker now executes the installed wheel and CI tests a restricted non-root runtime.
+- Promotion remains blocked until complete dependency-installed GitHub Actions and deployment checks pass.
+
+# RegHub v0.3.1.2 Forensic Release Hardening Audit
+
+- Baseline: `f80a984fce41ff36c82e288d3fd33b3518d32091`.
+- Classification: zero-feature, zero-schema production and release hardening hotfix.
+- Security: production fails closed for the development session secret, insecure public/OIDC URLs and
+  wildcard proxy trust.
+- Startup: migration and seed execution is serialized across replicas with a PostgreSQL advisory lock.
+- Delivery: dependency consistency, one Alembic head, strict third-party audit and readiness-based
+  Docker health are mandatory.
+- Public API, database schema, runtime dependencies and registry behavior: unchanged.
+
 # RegHub v0.3.1.1 Final Stabilization Hotfix Audit
 
 - Baseline: v0.3.1.0 release commit.

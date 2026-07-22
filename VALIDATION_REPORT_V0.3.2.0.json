@@ -1,0 +1,54 @@
+{
+  "baseline": {
+    "archive": "RegHub-v0.3.2.0-current-baseline-source.zip",
+    "archive_sha256": "0aa95744d2960ac1f8085f0e9da95272dc04c73bdccde7986c73b6d6f8f75daa",
+    "branch": "hotfix/v0.3.1.2-forensic-release-hardening",
+    "git_head": "f80a984fce41ff36c82e288d3fd33b3518d32091",
+    "hidden_files_reconstructed": [
+      ".dockerignore",
+      ".env.example",
+      ".env.local.example",
+      ".github/workflows/ci.yml",
+      ".gitignore"
+    ]
+  },
+  "classification": "production-readiness release candidate",
+  "created_at": "2026-07-22",
+  "environment": {
+    "platform": "Linux-6.12.13-x86_64-with-glibc2.41",
+    "python": "3.13.5"
+  },
+  "not_executed_in_build_sandbox": {
+    "docker_build_and_smoke": "Docker daemon unavailable; mandatory in CI.",
+    "full_dependency_installed_pytest_and_coverage": "Some locked dependencies unavailable; mandatory in CI with 70% gate.",
+    "pip_audit": "pip-audit and live advisory access unavailable; strict audit remains mandatory in CI.",
+    "postgresql_redis_integration": "Service containers unavailable; mandatory in CI.",
+    "ruff_0_15_22": "Exact binary unavailable from the restricted package gateway; mandatory in CI."
+  },
+  "passed": {
+    "alembic_single_head": "20260722_0008",
+    "ast_parse_python_files": 144,
+    "baseline_zip_integrity": true,
+    "focused_security_compatibility_tests": 58,
+    "git_diff_check": true,
+    "manifest_backed_archive_verification": true,
+    "production_config_verifier": true,
+    "python_compileall": true,
+    "release_file_manifest_verifier": true,
+    "release_tree_verifier": true,
+    "shell_entrypoint_syntax": true,
+    "static_security_verifier": true,
+    "toml_yaml_jinja_parse": true,
+    "wheel_build": "reghub-0.3.2.0-py3-none-any.whl",
+    "wheel_import": true
+  },
+  "promotion_gate": {
+    "main_merge_before_green": false,
+    "production_ready_when": [
+      "quality-and-integration GitHub Actions job is green",
+      "docker-smoke GitHub Actions job is green",
+      "Coolify/Keycloak/DNS/TLS/backup operational checks pass"
+    ]
+  },
+  "release": "0.3.2.0"
+}

@@ -1557,7 +1557,12 @@ class LocalImportView(_AdminBaseView):
                     "provider_id": str(form.get("provider_id", "")) or None,
                 }
                 if import_type == "manifest":
-                    payload = json.loads(str(form.get("manifest_json", "")))
+                    manifest_text = str(form.get("manifest_json", ""))
+                    if len(manifest_text.encode("utf-8")) > container.local_upload_max_bytes:
+                        raise ValidationError(
+                            "Manifest JSON exceeds the configured maximum upload size"
+                        )
+                    payload = json.loads(manifest_text)
                     if not isinstance(payload, dict):
                         raise ValidationError("Manifest JSON must be an object")
                     return await self._queue_operation(
