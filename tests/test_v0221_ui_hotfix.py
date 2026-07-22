@@ -31,10 +31,10 @@ CUSTOM_TEMPLATES = [
 def test_all_custom_admin_pages_use_full_width_hotfix_layout() -> None:
     template_root = Path(__file__).parents[1] / "templates"
     for relative_path in CUSTOM_TEMPLATES:
-        first_line = (template_root / relative_path).read_text().splitlines()[0]
+        first_line = (template_root / relative_path).read_text(encoding="utf-8").splitlines()[0]
         assert first_line == '{% extends "reghub_layout.html" %}'
 
-    layout = (template_root / "reghub_layout.html").read_text()
+    layout = (template_root / "reghub_layout.html").read_text(encoding="utf-8")
     assert 'class="col-12 reghub-page-shell"' in layout
     assert ".reghub-page-shell" in layout
     assert "overflow-wrap: anywhere" in layout

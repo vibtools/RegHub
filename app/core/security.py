@@ -28,7 +28,7 @@ def derive_secret(secret: str, purpose: str) -> str:
     allowed = "abcdefghijklmnopqrstuvwxyz0123456789-_."
     if not normalized_purpose or any(ch not in allowed for ch in normalized_purpose):
         raise ValueError("Key-derivation purpose contains unsupported characters")
-    context = f"reghub-key-v1:{normalized_purpose}".encode("utf-8")
+    context = f"reghub-key-v1:{normalized_purpose}".encode()
     return hmac.new(secret.encode("utf-8"), context, hashlib.sha256).hexdigest()
 
 

@@ -27,9 +27,7 @@ class AuditChainState(Base):
 
 class AuditEvent(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "audit_events"
-    __table_args__ = (
-        CheckConstraint("sequence > 0", name="ck_audit_events_sequence_positive"),
-    )
+    __table_args__ = (CheckConstraint("sequence > 0", name="ck_audit_events_sequence_positive"),)
 
     sequence: Mapped[int] = mapped_column(BigInteger, unique=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

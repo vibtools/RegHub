@@ -20,9 +20,7 @@ def calculate_quality(
         + (4 if repository.primary_language else 0)
     )
     structure_score = (
-        8
-        if root_files_present and package_metadata_present
-        else (4 if root_files_present else 0)
+        8 if root_files_present and package_metadata_present else (4 if root_files_present else 0)
     )
     breakdown = {
         "documentation": 15

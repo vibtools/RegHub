@@ -49,9 +49,7 @@ app.state.container = ApplicationContainer(settings)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(
     SessionMiddleware,
-    secret_key=derive_secret(
-        settings.session_secret.get_secret_value(), "oidc-state-session"
-    ),
+    secret_key=derive_secret(settings.session_secret.get_secret_value(), "oidc-state-session"),
     session_cookie="reghub_oidc_state",
     max_age=600,
     same_site="lax",

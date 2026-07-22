@@ -51,7 +51,7 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: python scripts/retry_command.py --attempts 3 --initial-delay 3 -- python -m pip install --upgrade pip
-      - run: python scripts/retry_command.py --attempts 3 --initial-delay 3 -- python -m pip install -e ".[dev]"
+      - run: python scripts/retry_command.py --attempts 3 --initial-delay 3 -- python -m pip install ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
       - run: python -m compileall -q app scripts tests

@@ -97,10 +97,10 @@ def test_settings_actions_use_ajax_and_server_render_the_requested_pane(tmp_path
 
 def test_settings_template_intercepts_every_settings_form_and_removes_dev_banners() -> None:
     root = Path(__file__).parents[1]
-    settings = (root / "templates" / "settings.html").read_text()
-    github = (root / "templates" / "github_import.html").read_text()
-    registry = (root / "templates" / "registry_import.html").read_text()
-    local = (root / "templates" / "local_import.html").read_text()
+    settings = (root / "templates" / "settings.html").read_text(encoding="utf-8")
+    github = (root / "templates" / "github_import.html").read_text(encoding="utf-8")
+    registry = (root / "templates" / "registry_import.html").read_text(encoding="utf-8")
+    local = (root / "templates" / "local_import.html").read_text(encoding="utf-8")
 
     assert "data-settings-form" in settings
     assert "submitSettingsForm" in settings
@@ -197,8 +197,12 @@ def test_original_repository_endpoint_and_settings_registry(tmp_path: Path) -> N
         assert payload["data"]["source_revision"] == "abc123"
         assert payload["meta"]["request_id"] == "v0232-api-request"
 
-    settings_markup = (Path(__file__).parents[1] / "templates" / "settings.html").read_text()
-    api_catalog = (Path(__file__).parents[1] / "app" / "runtime" / "api_catalog.py").read_text()
+    settings_markup = (Path(__file__).parents[1] / "templates" / "settings.html").read_text(
+        encoding="utf-8"
+    )
+    api_catalog = (Path(__file__).parents[1] / "app" / "runtime" / "api_catalog.py").read_text(
+        encoding="utf-8"
+    )
     assert "Original repository" in api_catalog
     assert "template_repository" in api_catalog
     assert "apiEndpointTable" in settings_markup

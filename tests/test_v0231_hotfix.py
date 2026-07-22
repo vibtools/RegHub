@@ -104,9 +104,9 @@ def test_settings_actions_preserve_active_tab_and_api_check_uses_root_app(tmp_pa
 
 def test_api_endpoint_registry_and_compact_terminal_markup_are_present() -> None:
     root = Path(__file__).parents[1]
-    settings = (root / "templates" / "settings.html").read_text()
-    detail = (root / "templates" / "operation_detail.html").read_text()
-    layout = (root / "templates" / "reghub_layout.html").read_text()
+    settings = (root / "templates" / "settings.html").read_text(encoding="utf-8")
+    detail = (root / "templates" / "operation_detail.html").read_text(encoding="utf-8")
+    layout = (root / "templates" / "reghub_layout.html").read_text(encoding="utf-8")
 
     assert "API endpoint registry" in settings
     assert "api-check-one" in settings

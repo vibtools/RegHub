@@ -52,7 +52,7 @@ def test_dedicated_settings_action_endpoint_avoids_post_route_404(tmp_path: Path
 
 
 def test_settings_ajax_replaces_only_active_pane_and_never_freezes_whole_page() -> None:
-    markup = (Path(__file__).parents[1] / "templates" / "settings.html").read_text()
+    markup = (Path(__file__).parents[1] / "templates" / "settings.html").read_text(encoding="utf-8")
 
     assert "new URL('/admin/settings/action'" in markup
     assert "replacePaneFromDocument" in markup

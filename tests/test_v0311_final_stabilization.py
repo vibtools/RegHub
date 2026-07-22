@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "migrations/versions/20260722_0008_final_stabilization_hotfix.py"
 
@@ -8,9 +7,7 @@ MIGRATION = ROOT / "migrations/versions/20260722_0008_final_stabilization_hotfix
 def test_release_version_is_consistent() -> None:
     assert 'version = "0.3.1.1"' in (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'version="0.3.1.1"' in (ROOT / "app/main.py").read_text(encoding="utf-8")
-    assert 'version="0.3.1.1"' in (
-        ROOT / "app/api/v1/catalog.py"
-    ).read_text(encoding="utf-8")
+    assert 'version="0.3.1.1"' in (ROOT / "app/api/v1/catalog.py").read_text(encoding="utf-8")
 
 
 def test_only_one_runtime_application_tree_exists() -> None:

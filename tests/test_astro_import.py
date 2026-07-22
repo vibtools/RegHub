@@ -67,7 +67,9 @@ async def test_astro_repository_import_creates_astro_manifest(tmp_path) -> None:
 
     assert template.framework.slug == "astro"
     assert template.manifest["framework"] == "astro"
-    assert template.manifest["deploy"]["type"] == "static"
+    assert template.manifest["deploy"]["type"] == "unknown"
+    assert "build" not in template.manifest
+    assert template.manifest["environment"] == []
     assert template.status.value == "draft"
 
     await engine.dispose()

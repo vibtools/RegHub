@@ -288,10 +288,10 @@ async def test_clear_operations_keeps_active_records(tmp_path: Path) -> None:
 
 def test_v023_ui_exposes_productive_controls() -> None:
     root = Path(__file__).parents[1]
-    settings = (root / "templates" / "settings.html").read_text()
-    operations = (root / "templates" / "operations_list.html").read_text()
-    detail = (root / "templates" / "operation_detail.html").read_text()
-    gallery = (root / "templates" / "asset_gallery.html").read_text()
+    settings = (root / "templates" / "settings.html").read_text(encoding="utf-8")
+    operations = (root / "templates" / "operations_list.html").read_text(encoding="utf-8")
+    detail = (root / "templates" / "operation_detail.html").read_text(encoding="utf-8")
+    gallery = (root / "templates" / "asset_gallery.html").read_text(encoding="utf-8")
 
     assert "API Manage" in settings
     assert "Development Mode" in settings

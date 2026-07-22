@@ -30,9 +30,7 @@ def test_redirect_is_local_only() -> None:
 
 def test_security_boundaries_use_separate_derived_keys() -> None:
     secret = "s" * 64
-    assert derive_secret(secret, "admin-auth-cookie") != derive_secret(
-        secret, "oidc-state-session"
-    )
+    assert derive_secret(secret, "admin-auth-cookie") != derive_secret(secret, "oidc-state-session")
     assert derive_secret(secret, "admin-auth-cookie") != derive_secret(
         secret, "sqladmin-aux-session"
     )

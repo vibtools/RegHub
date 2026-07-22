@@ -93,7 +93,9 @@ async def test_import_creates_manifest_analysis_and_version(tmp_path) -> None:
     assert template.provider.slug == "community"
     assert template.quality_score > 0
     assert template.manifest["schema_version"] == "2.0"
-    assert template.manifest["build"]["command"] == "pnpm build"
+    assert template.manifest["deploy"]["type"] == "unknown"
+    assert "build" not in template.manifest
+    assert template.manifest["environment"] == []
     async with session_factory() as session:
         versions = list((await session.scalars(select(TemplateVersion))).all())
         assert len(versions) == 1

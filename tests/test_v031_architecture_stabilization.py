@@ -138,9 +138,9 @@ def test_database_models_expose_stabilization_constraints() -> None:
 
 
 def test_stabilization_migration_removes_only_generated_deployment_intelligence() -> None:
-    migration = Path(
-        "migrations/versions/20260722_0007_architecture_stabilization.py"
-    ).read_text(encoding="utf-8")
+    migration = Path("migrations/versions/20260722_0007_architecture_stabilization.py").read_text(
+        encoding="utf-8"
+    )
     for key in (
         "build_command",
         "start_command",
