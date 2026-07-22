@@ -88,7 +88,5 @@ def require_permission(request: Request, permission: str) -> AdminIdentity:
     if not isinstance(identity, AdminIdentity):
         raise PermissionDeniedError("Administrator authentication is required")
     if not has_permission(identity, permission):
-        raise PermissionDeniedError(
-            f"This administrator role does not permit '{permission}'"
-        )
+        raise PermissionDeniedError(f"This administrator role does not permit '{permission}'")
     return identity

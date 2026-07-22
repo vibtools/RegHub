@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any
+
 from sqlalchemy import BigInteger, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 

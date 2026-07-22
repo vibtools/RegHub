@@ -52,9 +52,7 @@ async def _cache_get(request: Request, response: Response, namespace: str, adapt
         return None
     response.headers["X-RegHub-Cache"] = "HIT"
     if isinstance(value, BaseModel) and hasattr(value, "meta"):
-        value = value.model_copy(
-            update={"meta": ResponseMeta(request_id=request.state.request_id)}
-        )
+        value = value.model_copy(update={"meta": ResponseMeta(request_id=request.state.request_id)})
     return value
 
 

@@ -1106,9 +1106,7 @@ class SettingsView(_AdminBaseView):
                     current_redis_worker = next(
                         (item.enabled for item in features if item.key == "redis_worker"), False
                     )
-                    requested_redis_worker = feature_updates.get(
-                        "redis_worker", (False, True)
-                    )[0]
+                    requested_redis_worker = feature_updates.get("redis_worker", (False, True))[0]
                     # Enabling the durable queue is safe only after both Redis and the
                     # standalone worker are genuinely available. Validate before the
                     # database mutation so a failed activation never leaves a misleading

@@ -454,9 +454,7 @@ class OperationRunner:
             )
         return status
 
-    async def set_redis_worker_enabled(
-        self, enabled: bool, *, verify_worker: bool = False
-    ) -> None:
+    async def set_redis_worker_enabled(self, enabled: bool, *, verify_worker: bool = False) -> None:
         if enabled:
             if verify_worker:
                 await self.validate_redis_worker_activation()
@@ -532,9 +530,7 @@ class OperationRunner:
         try:
             value = await self._queue.worker_status()
             return (
-                {**value, "redis_worker_enabled": True, "redis_configured": True}
-                if value
-                else None
+                {**value, "redis_worker_enabled": True, "redis_configured": True} if value else None
             )
         except Exception:
             logger.exception("Unable to read Redis operation worker status")

@@ -131,9 +131,7 @@ class CatalogCacheService:
             if len(self._memory) > 5000:
                 now = time.monotonic()
                 self._memory = {
-                    item_key: item
-                    for item_key, item in self._memory.items()
-                    if item[0] > now
+                    item_key: item for item_key, item in self._memory.items() if item[0] > now
                 }
 
     async def invalidate_all(self) -> None:
