@@ -1,8 +1,7 @@
-from pathlib import Path
-from typing import Any
-
 import sys
 import types
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,10 +12,10 @@ _slugify = types.ModuleType("slugify")
 _slugify.slugify = lambda value: str(value).strip().lower().replace(" ", "-")
 sys.modules.setdefault("slugify", _slugify)
 
-from app.core.config import Settings
-from app.core.exceptions import ValidationError
-from app.operations.service import OperationRunner
-from app.runtime.settings import RuntimeSettingsService
+from app.core.config import Settings  # noqa: E402
+from app.core.exceptions import ValidationError  # noqa: E402
+from app.operations.service import OperationRunner  # noqa: E402
+from app.runtime.settings import RuntimeSettingsService  # noqa: E402
 
 
 def test_governance_uses_shared_responsive_layout_block():
@@ -59,15 +58,15 @@ async def test_runtime_worker_activation_requires_redis_and_heartbeat():
     with pytest.raises(ValidationError, match="REDIS_URL"):
         await runner.set_redis_worker_enabled(True)
 
-    runner._queue = _QueueStub(None)  # type: ignore[assignment]  # noqa: SLF001
+    runner._queue = _QueueStub(None)  # type: ignore[assignment]
     with pytest.raises(ValidationError, match="heartbeat"):
         await runner.set_redis_worker_enabled(True, verify_worker=True)
     assert not runner.redis_worker_enabled
 
-    runner._queue = _QueueStub(  # type: ignore[assignment]  # noqa: SLF001
+    runner._queue = _QueueStub(  # type: ignore[assignment]
         {"worker_id": "worker-1", "status": "idle", "queue_depth": 0}
     )
-    runner._queue_initialized = False  # noqa: SLF001
+    runner._queue_initialized = False
     await runner.set_redis_worker_enabled(True, verify_worker=True)
     assert runner.redis_worker_enabled
     assert runner.effective_backend == "redis"

@@ -1,7 +1,5 @@
 import base64
 import hashlib
-import json
-from datetime import UTC, datetime
 
 import pytest
 from cryptography.fernet import Fernet
@@ -33,7 +31,7 @@ def test_rbac_preserves_legacy_admin_and_maps_granular_roles():
 
 def test_old_admin_cookie_defaults_to_super_admin():
     signer = AdminTokenSigner("x" * 40)
-    token = signer._serializer.dumps(  # noqa: SLF001 - compatibility fixture
+    token = signer._serializer.dumps(
         {"subject": "legacy", "email": None, "name": None, "claims": {}}
     )
     identity = signer.verify(token, 60)
@@ -153,7 +151,7 @@ async def test_trusted_proxy_headers_normalize_trusted_chain():
 
 def test_audit_details_redact_nested_credentials_and_key_rotation():
     audit = AuditService(None, ["new-audit-key", "old-audit-key"])  # type: ignore[arg-type]
-    safe = audit._safe_details(  # noqa: SLF001 - direct security regression check
+    safe = audit._safe_details(
         {
             "provider": {"api_token": "should-not-appear", "name": "GitHub"},
             "items": [{"password": "hidden", "value": "safe"}],

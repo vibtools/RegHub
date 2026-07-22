@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0.2 — CI Quality Gate Hotfix
+
+- Corrected Ruff import ordering and removed unused imports introduced by v0.3.0/v0.3.0.1.
+- Corrected test-only lint directives without changing runtime behavior.
+- No database migration, API contract, Settings, Governance, worker, or deployment behavior changed.
+
 ## 0.3.0.1 - 2026-07-22
 
 - Fixed the Governance custom page layout by using the shared responsive SQLAdmin content block.

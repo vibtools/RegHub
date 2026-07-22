@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 from email.utils import format_datetime
 
 from fastapi import APIRouter, Query, Request, Response
-from pydantic import BaseModel, TypeAdapter, ValidationError as PydanticValidationError
+from pydantic import BaseModel, TypeAdapter
+from pydantic import ValidationError as PydanticValidationError
 
 from app.api.dependencies import DatabaseSession
 from app.core.config import get_settings
@@ -361,7 +362,7 @@ async def capabilities(request: Request, response: Response):
         return cached
     _cache(response)
     result = CapabilitiesRead(
-        version="0.3.0.1",
+        version="0.3.0.2",
         registry_adapters=[*container.adapter_names, "local-manifest", "local-zip"],
         framework_detection=[
             "astro",

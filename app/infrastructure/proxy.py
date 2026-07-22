@@ -2,7 +2,7 @@ import ipaddress
 from collections.abc import Iterable
 from typing import Any
 
-from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 
 class TrustedProxyHeadersMiddleware:

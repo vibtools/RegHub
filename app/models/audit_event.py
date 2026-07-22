@@ -1,8 +1,6 @@
 from datetime import datetime
 from typing import Any
-from uuid import UUID
-
-from sqlalchemy import BigInteger, DateTime, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base

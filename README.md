@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.3.0.1 Governance UI & Redis Worker Control Hotfix**
+Current release: **v0.3.0.2 CI Quality Gate Hotfix**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
