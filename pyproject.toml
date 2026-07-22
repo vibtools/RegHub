@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reghub"
-version = "0.3.0.2"
+version = "0.3.0.3"
 description = "Registry platform for YGIT templates"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"

@@ -14,6 +14,7 @@ from app.core.config import Settings
 from app.database.base import Base
 from app.operations.service import OperationService
 from app.runtime.settings import RuntimeSettingsService
+from tests.support import super_admin_identity
 
 CUSTOM_TEMPLATES = [
     "asset_gallery.html",
@@ -69,7 +70,7 @@ def test_settings_is_compact_tabbed_and_operation_page_has_polling_fallback(tmp_
 
     @app.middleware("http")
     async def add_identity(request, call_next):
-        request.state.admin_identity = SimpleNamespace(subject="admin-user")
+        request.state.admin_identity = super_admin_identity()
         return await call_next(request)
 
     async def reload_runtime() -> None:

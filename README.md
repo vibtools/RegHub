@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.3.0.2 CI Quality Gate Hotfix**
+Current release: **v0.3.0.3 CI Compatibility and Resilience Hotfix**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -161,4 +161,6 @@ GET /api/v1/ready
 6. Verify health, readiness, tag filtering, Operations, and Settings.
 
 See `docs/31_V0.3.0_PRODUCTION_INFRASTRUCTURE_GOVERNANCE.md`,
-`docs/32_V0.3.0_UPGRADE.md` and `docs/33_V0.3.0_RBAC_AUDIT.md`.
+`docs/32_V0.3.0_UPGRADE.md`, `docs/33_V0.3.0_RBAC_AUDIT.md`,
+`docs/37_V0.3.0.3_CI_COMPATIBILITY_RESILIENCE_HOTFIX.md` and
+`docs/38_V0.3.0.3_UPGRADE.md`.

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.0.3 — CI Compatibility and Resilience Hotfix
+
+- Updated historical admin tests to use the production `AdminIdentity` RBAC contract without weakening runtime authorization.
+- Made catalog caching fail-open when the cache service is absent or temporarily unavailable.
+- Isolated terminal audit/cache side effects so they cannot rewrite a completed operation into a false failure.
+- Added regression tests for cache and audit degradation paths.
+- Added bounded retry wrappers for transient package/network/process failures in CI and a read-only Windows PowerShell validation script.
+- Kept the 70% coverage gate, existing APIs, migrations, Settings, Governance, worker controls, data, and deployment boundaries unchanged.
+
 ## v0.3.0.2 — CI Quality Gate Hotfix
 
 - Corrected Ruff import ordering and removed unused imports introduced by v0.3.0/v0.3.0.1.

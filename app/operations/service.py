@@ -454,7 +454,9 @@ class OperationRunner:
             )
         return status
 
-    async def set_redis_worker_enabled(self, enabled: bool, *, verify_worker: bool = False) -> None:
+    async def set_redis_worker_enabled(
+        self, enabled: bool, *, verify_worker: bool = False
+    ) -> None:
         if enabled:
             if verify_worker:
                 await self.validate_redis_worker_activation()
@@ -530,7 +532,9 @@ class OperationRunner:
         try:
             value = await self._queue.worker_status()
             return (
-                {**value, "redis_worker_enabled": True, "redis_configured": True} if value else None
+                {**value, "redis_worker_enabled": True, "redis_configured": True}
+                if value
+                else None
             )
         except Exception:
             logger.exception("Unable to read Redis operation worker status")
@@ -546,19 +550,41 @@ class OperationRunner:
     ) -> None:
         if self._container is None or operation is None:
             return
-        await self._container.audit.append(
-            action=f"operation.{operation.operation_type}",
-            resource_type="admin_operation",
-            resource_id=str(operation.id),
-            outcome=outcome,
-            actor_subject=operation.requested_by,
-            actor_roles=list(operation.requested_roles or []),
-            details={
-                "title": operation.title,
-                "result": _safe_payload(result or {}),
-                "error": _redact_text(error or "") or None,
-            },
-        )
+
+        # Governance and cache services are mandatory in the full ApplicationContainer, but
+        # operation runners are also exercised by isolated adapters/tests and may be embedded
+        # in reduced maintenance contexts. A missing or temporarily unavailable side-effect
+        # service must never rewrite an already-persisted successful operation as failed.
+        audit = getattr(self._container, "audit", None)
+        if audit is not None:
+            try:
+                await audit.append(
+                    action=f"operation.{operation.operation_type}",
+                    resource_type="admin_operation",
+                    resource_id=str(operation.id),
+                    outcome=outcome,
+                    actor_subject=operation.requested_by,
+                    actor_roles=list(operation.requested_roles or []),
+                    details={
+                        "title": operation.title,
+                        "result": _safe_payload(result or {}),
+                        "error": _redact_text(error or "") or None,
+                    },
+                )
+            except Exception:
+                logger.exception("Unable to append terminal audit event for %s", operation.id)
+                try:
+                    await self.service.append_log(
+                        operation.id,
+                        "Governance audit append failed after operation completion",
+                        level="warning",
+                        data={"outcome": outcome},
+                    )
+                except Exception:
+                    logger.exception("Unable to persist the audit-degradation operation warning")
+        else:
+            logger.debug("Audit service is unavailable for operation %s", operation.id)
+
         if operation.operation_type in {
             "import_repository",
             "import_local_manifest",
@@ -568,7 +594,23 @@ class OperationRunner:
             "generate_thumbnails",
             "retry_screenshot_jobs",
         }:
-            await self._container.catalog_cache.invalidate_all()
+            cache = getattr(self._container, "catalog_cache", None)
+            if cache is None:
+                logger.debug("Catalog cache is unavailable for operation %s", operation.id)
+                return
+            try:
+                await cache.invalidate_all()
+            except Exception:
+                logger.exception("Unable to invalidate catalog cache after %s", operation.id)
+                try:
+                    await self.service.append_log(
+                        operation.id,
+                        "Catalog cache invalidation failed; database result remains authoritative",
+                        level="warning",
+                        data={"outcome": outcome},
+                    )
+                except Exception:
+                    logger.exception("Unable to persist the cache-degradation operation warning")
 
     async def run_forever(self) -> None:
         if self._queue is None:

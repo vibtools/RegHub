@@ -1106,7 +1106,9 @@ class SettingsView(_AdminBaseView):
                     current_redis_worker = next(
                         (item.enabled for item in features if item.key == "redis_worker"), False
                     )
-                    requested_redis_worker = feature_updates.get("redis_worker", (False, True))[0]
+                    requested_redis_worker = feature_updates.get(
+                        "redis_worker", (False, True)
+                    )[0]
                     # Enabling the durable queue is safe only after both Redis and the
                     # standalone worker are genuinely available. Validate before the
                     # database mutation so a failed activation never leaves a misleading
@@ -1118,7 +1120,9 @@ class SettingsView(_AdminBaseView):
                         updated_by=identity,
                     )
                     await container.reload_runtime()
-                    await container.apply_runtime_infrastructure()
+                    apply_infrastructure = getattr(container, "apply_runtime_infrastructure", None)
+                    if callable(apply_infrastructure):
+                        await apply_infrastructure()
                     success = "Feature controls updated immediately. No web redeploy was required."
                 elif action_name == "save_integration":
                     raw_config = str(form.get("config_json", "{}")).strip() or "{}"
@@ -1148,7 +1152,9 @@ class SettingsView(_AdminBaseView):
                     success = "Integration runtime configuration removed or disabled."
                 elif action_name == "reload_runtime":
                     await container.reload_runtime()
-                    await container.apply_runtime_infrastructure()
+                    apply_infrastructure = getattr(container, "apply_runtime_infrastructure", None)
+                    if callable(apply_infrastructure):
+                        await apply_infrastructure()
                     success = "Runtime configuration reloaded."
                 elif action_name == "save_api_mode":
                     if api_access is None:
@@ -1213,14 +1219,26 @@ class SettingsView(_AdminBaseView):
                     success = "API block rule deleted."
                 else:
                     raise ValidationError("Unsupported settings action")
-                await container.catalog_cache.invalidate_all()
-                await container.audit.append(
-                    action=f"settings.{action_name}",
-                    resource_type="runtime_settings",
-                    identity=request.state.admin_identity,
-                    request=request,
-                    details={"active_pane": active_pane},
-                )
+                cache = getattr(container, "catalog_cache", None)
+                if cache is not None:
+                    try:
+                        await cache.invalidate_all()
+                    except Exception:
+                        logger.exception(
+                            "Settings were saved but catalog cache invalidation failed"
+                        )
+                audit = getattr(container, "audit", None)
+                if audit is not None:
+                    try:
+                        await audit.append(
+                            action=f"settings.{action_name}",
+                            resource_type="runtime_settings",
+                            identity=request.state.admin_identity,
+                            request=request,
+                            details={"active_pane": active_pane},
+                        )
+                    except Exception:
+                        logger.exception("Settings were saved but governance audit append failed")
             except json.JSONDecodeError:
                 error = "Integration config JSON is invalid"
             except (RegistryError, ValueError) as exc:

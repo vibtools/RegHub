@@ -25,6 +25,7 @@ from app.models.template import Template
 from app.operations.service import OperationService
 from app.registry.template import TemplateService
 from app.runtime.settings import RuntimeSettingsService
+from tests.support import super_admin_identity
 
 
 async def _database(tmp_path: Path, name: str):
@@ -274,7 +275,7 @@ def test_operations_console_and_settings_pages_render(tmp_path: Path) -> None:
 
     @app.middleware("http")
     async def add_identity(request, call_next):
-        request.state.admin_identity = SimpleNamespace(subject="admin-user")
+        request.state.admin_identity = super_admin_identity()
         return await call_next(request)
 
     reload_calls: list[bool] = []
@@ -381,12 +382,15 @@ def test_template_action_queues_operation_and_opens_progress_page(tmp_path: Path
 
     @app.middleware("http")
     async def add_identity(request, call_next):
-        request.state.admin_identity = SimpleNamespace(subject="admin-user")
+        request.state.admin_identity = super_admin_identity()
         return await call_next(request)
+
+    async def enqueue(operation_id) -> None:
+        queued.append(operation_id)
 
     app.state.container = SimpleNamespace(
         operation_service=operation_service,
-        operation_runner=SimpleNamespace(enqueue=queued.append),
+        operation_runner=SimpleNamespace(enqueue=enqueue),
         require_feature=lambda *_args, **_kwargs: None,
     )
     admin = Admin(app=app, engine=engine, base_url="/admin", templates_dir="templates")

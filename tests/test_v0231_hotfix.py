@@ -19,6 +19,7 @@ from app.database.base import Base
 from app.operations.service import OperationRunner, OperationService
 from app.runtime.api_access import ApiAccessService
 from app.runtime.settings import RuntimeSettingsService
+from tests.support import super_admin_identity
 
 
 def test_settings_actions_preserve_active_tab_and_api_check_uses_root_app(tmp_path: Path) -> None:
@@ -47,7 +48,7 @@ def test_settings_actions_preserve_active_tab_and_api_check_uses_root_app(tmp_pa
 
     @app.middleware("http")
     async def add_identity(request, call_next):
-        request.state.admin_identity = SimpleNamespace(subject="admin-user")
+        request.state.admin_identity = super_admin_identity()
         request.state.request_id = "v0231-request"
         return await call_next(request)
 

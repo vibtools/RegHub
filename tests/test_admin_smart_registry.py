@@ -19,6 +19,7 @@ from app.models.sync_history import SyncHistory
 from app.models.template import Template
 from app.models.template_asset import TemplateAsset
 from app.models.template_version import TemplateVersion
+from tests.support import super_admin_identity
 
 
 def test_smart_registry_admin_lists_render(tmp_path: Path) -> None:
@@ -80,6 +81,12 @@ def test_smart_registry_admin_lists_render(tmp_path: Path) -> None:
 
     asyncio.run(prepare())
     app = FastAPI()
+
+    @app.middleware("http")
+    async def add_identity(request, call_next):
+        request.state.admin_identity = super_admin_identity()
+        return await call_next(request)
+
     admin = Admin(app=app, engine=engine, base_url="/admin")
     for view in (TemplateAdmin, TemplateVersionAdmin, SyncHistoryAdmin, TemplateAssetAdmin):
         admin.add_view(view)

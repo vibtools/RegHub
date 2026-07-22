@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import UTC, datetime
 from email.utils import format_datetime
 
@@ -30,6 +31,7 @@ from app.schemas.catalog import (
 from app.schemas.manifest import TemplateManifest
 
 router = APIRouter(tags=["registry"])
+logger = logging.getLogger(__name__)
 
 
 def _cache_key(request: Request, namespace: str) -> str:
@@ -37,9 +39,24 @@ def _cache_key(request: Request, namespace: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _catalog_cache(request: Request):
+    container = getattr(request.app.state, "container", None)
+    return getattr(container, "catalog_cache", None)
+
+
 async def _cache_get(request: Request, response: Response, namespace: str, adapter: TypeAdapter):
-    cache = request.app.state.container.catalog_cache
-    payload = await cache.get_json(_cache_key(request, namespace))
+    cache = _catalog_cache(request)
+    if cache is None:
+        response.headers["X-RegHub-Cache"] = "BYPASS"
+        return None
+    try:
+        payload = await cache.get_json(_cache_key(request, namespace))
+    except Exception:
+        # Cache infrastructure is an optimization. A transient Redis/cache failure must not
+        # turn a healthy registry database request into an API outage.
+        logger.exception("Catalog cache read failed for namespace %s", namespace)
+        response.headers["X-RegHub-Cache"] = "BYPASS"
+        return None
     if payload is None:
         response.headers["X-RegHub-Cache"] = "MISS"
         return None
@@ -52,16 +69,25 @@ async def _cache_get(request: Request, response: Response, namespace: str, adapt
         return None
     response.headers["X-RegHub-Cache"] = "HIT"
     if isinstance(value, BaseModel) and hasattr(value, "meta"):
-        value = value.model_copy(update={"meta": ResponseMeta(request_id=request.state.request_id)})
+        value = value.model_copy(
+            update={"meta": ResponseMeta(request_id=request.state.request_id)}
+        )
     return value
 
 
 async def _cache_set(request: Request, namespace: str, adapter: TypeAdapter, value: object) -> None:
+    cache = _catalog_cache(request)
+    if cache is None:
+        return
     validated = adapter.validate_python(value)
-    await request.app.state.container.catalog_cache.set_json(
-        _cache_key(request, namespace),
-        adapter.dump_python(validated, mode="json"),
-    )
+    try:
+        await cache.set_json(
+            _cache_key(request, namespace),
+            adapter.dump_python(validated, mode="json"),
+        )
+    except Exception:
+        # Public responses are authoritative from PostgreSQL; cache write failure is non-fatal.
+        logger.exception("Catalog cache write failed for namespace %s", namespace)
 
 
 _TEMPLATE_PAGE = TypeAdapter(TemplatePage)
@@ -360,7 +386,7 @@ async def capabilities(request: Request, response: Response):
         return cached
     _cache(response)
     result = CapabilitiesRead(
-        version="0.3.0.2",
+        version="0.3.0.3",
         registry_adapters=[*container.adapter_names, "local-manifest", "local-zip"],
         framework_detection=[
             "astro",

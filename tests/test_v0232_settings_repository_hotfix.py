@@ -23,6 +23,7 @@ from app.models.sync_history import SyncHistory
 from app.models.template import Template
 from app.runtime.api_access import ApiAccessService
 from app.runtime.settings import RuntimeSettingsService
+from tests.support import super_admin_identity
 
 
 def _settings_app(tmp_path: Path):
@@ -50,7 +51,7 @@ def _settings_app(tmp_path: Path):
 
     @app.middleware("http")
     async def add_identity(request, call_next):
-        request.state.admin_identity = SimpleNamespace(subject="admin-user")
+        request.state.admin_identity = super_admin_identity()
         request.state.request_id = "v0232-request"
         return await call_next(request)
 

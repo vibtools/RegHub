@@ -13,6 +13,7 @@ from app.models.category import Category
 from app.models.framework import Framework
 from app.models.provider import Provider
 from app.models.template import Template
+from tests.support import super_admin_identity
 
 
 def test_template_admin_list_and_filters_render(tmp_path: Path) -> None:
@@ -57,6 +58,12 @@ def test_template_admin_list_and_filters_render(tmp_path: Path) -> None:
     framework_id = asyncio.run(prepare_database())
 
     app = FastAPI()
+
+    @app.middleware("http")
+    async def add_identity(request, call_next):
+        request.state.admin_identity = super_admin_identity()
+        return await call_next(request)
+
     admin = Admin(app=app, engine=engine, base_url="/admin")
     admin.add_view(TemplateAdmin)
 

@@ -20,13 +20,14 @@ from app.models.framework import Framework
 from app.models.provider import Provider
 from app.models.template import Template
 from app.operations.service import OperationService
+from tests.support import super_admin_identity
 
 
 class _Runner:
     def __init__(self) -> None:
         self.enqueued: list[UUID] = []
 
-    def enqueue(self, operation_id: UUID) -> None:
+    async def enqueue(self, operation_id: UUID) -> None:
         self.enqueued.append(operation_id)
 
 
@@ -106,7 +107,7 @@ def test_duplicate_import_renders_template_card_and_continue_update(tmp_path: Pa
 
     @app.middleware("http")
     async def add_identity(request, call_next):
-        request.state.admin_identity = SimpleNamespace(subject="admin-user")
+        request.state.admin_identity = super_admin_identity()
         return await call_next(request)
 
     app.state.container = SimpleNamespace(

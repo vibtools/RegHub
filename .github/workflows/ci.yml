@@ -50,8 +50,8 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: python -m pip install --upgrade pip
-      - run: python -m pip install -e ".[dev]"
+      - run: python scripts/retry_command.py --attempts 3 --initial-delay 3 -- python -m pip install --upgrade pip
+      - run: python scripts/retry_command.py --attempts 3 --initial-delay 3 -- python -m pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
       - run: python -m compileall -q app scripts tests
@@ -79,7 +79,11 @@ jobs:
           --health-retries 20
     steps:
       - uses: actions/checkout@v4
-      - run: docker build --pull --tag reghub-ci:${{ github.sha }} .
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python scripts/retry_command.py --attempts 3 --initial-delay 5 -- docker pull python:3.13-slim
+      - run: docker build --tag reghub-ci:${{ github.sha }} .
       - name: Start container
         run: |
           docker run --detach --name reghub-ci --network host \
