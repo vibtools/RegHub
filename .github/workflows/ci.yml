@@ -60,7 +60,10 @@ jobs:
       - run: alembic upgrade head
       - run: python -m scripts.seed
       - run: pytest --cov=app --cov-report=term-missing --cov-fail-under=70
-      - run: pip-audit --strict --skip-editable
+      - name: Snapshot third-party dependencies for audit
+        run: python -m pip freeze --exclude reghub > "$RUNNER_TEMP/reghub-audit-requirements.txt"
+      - name: Audit third-party dependencies
+        run: pip-audit --strict --no-deps --disable-pip --requirement "$RUNNER_TEMP/reghub-audit-requirements.txt"
 
   docker-smoke:
     runs-on: ubuntu-latest
