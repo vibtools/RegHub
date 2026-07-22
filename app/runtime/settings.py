@@ -49,16 +49,12 @@ class SecretCipher:
             raise ValidationError("At least one runtime encryption key is required")
         self._keys: list[tuple[str, Fernet]] = []
         for raw in keys:
-            digest = hashlib.sha256(
-                ("reghub-runtime-settings-v2:" + raw).encode("utf-8")
-            ).digest()
+            digest = hashlib.sha256(("reghub-runtime-settings-v2:" + raw).encode("utf-8")).digest()
             key_id = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
             self._keys.append((key_id, Fernet(base64.urlsafe_b64encode(digest))))
         self._legacy: list[Fernet] = []
         for raw in keys:
-            digest = hashlib.sha256(
-                ("reghub-runtime-settings-v1:" + raw).encode("utf-8")
-            ).digest()
+            digest = hashlib.sha256(("reghub-runtime-settings-v1:" + raw).encode("utf-8")).digest()
             self._legacy.append(Fernet(base64.urlsafe_b64encode(digest)))
 
     @property

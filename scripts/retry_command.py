@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-import subprocess  # noqa: S404 - executes an explicit command without a shell
+import subprocess
 import sys
 import time
 
@@ -34,7 +34,7 @@ def main() -> int:
     for attempt in range(1, args.attempts + 1):
         print(f"[retry] attempt {attempt}/{args.attempts}: {' '.join(args.command)}", flush=True)
         try:
-            completed = subprocess.run(args.command, check=False)  # noqa: S603, S607
+            completed = subprocess.run(args.command, check=False)  # noqa: S603
             return_code = int(completed.returncode)
         except OSError as exc:
             return_code = 127

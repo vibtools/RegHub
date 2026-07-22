@@ -68,9 +68,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     ]
                 )
             else:
-                checks.append(
-                    ("public", client_ip, self.settings.rate_limit_public_per_minute)
-                )
+                checks.append(("public", client_ip, self.settings.rate_limit_public_per_minute))
         else:
             return await call_next(request)
 

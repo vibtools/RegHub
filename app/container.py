@@ -93,9 +93,7 @@ class ApplicationContainer:
             return default
         return max(minimum, min(parsed, maximum))
 
-    async def apply_runtime_infrastructure(
-        self, *, verify_redis_worker: bool = False
-    ) -> None:
+    async def apply_runtime_infrastructure(self, *, verify_redis_worker: bool = False) -> None:
         """Apply runtime infrastructure switches without rebuilding the application.
 
         Redis itself and the standalone worker remain deployment infrastructure. Once

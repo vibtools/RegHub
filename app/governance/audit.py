@@ -105,8 +105,8 @@ class AuditService:
         normalized_resource_type = resource_type.strip()[:120]
         normalized_resource_id = resource_id.strip()[:255] if resource_id else None
         normalized_outcome = outcome.strip()[:32] or "succeeded"
-        normalized_subject = (identity.subject if identity else actor_subject)
-        normalized_email = (identity.email if identity else actor_email)
+        normalized_subject = identity.subject if identity else actor_subject
+        normalized_email = identity.email if identity else actor_email
         normalized_roles = list(identity.roles) if identity else list(actor_roles or [])
         if normalized_subject:
             normalized_subject = normalized_subject[:255]
