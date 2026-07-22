@@ -10,6 +10,7 @@ class AdminIdentity:
     email: str | None
     name: str | None
     claims: dict[str, Any]
+    roles: tuple[str, ...] = ()
 
 
 class AdminTokenSigner:
@@ -31,6 +32,11 @@ class AdminTokenSigner:
             email=payload.get("email"),
             name=payload.get("name"),
             claims=payload.get("claims") if isinstance(payload.get("claims"), dict) else {},
+            roles=(
+                tuple(item for item in payload["roles"] if isinstance(item, str))
+                if isinstance(payload.get("roles"), list)
+                else ("super_admin",)
+            ),
         )
 
 

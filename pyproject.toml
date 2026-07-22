@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "reghub"
-version = "0.2.3.4"
+version = "0.3.0"
 description = "Registry platform for YGIT templates"
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -26,6 +26,7 @@ dependencies = [
   "itsdangerous>=2.2,<3",
   "jinja2>=3.1,<4",
   "cryptography>=44,<47",
+  "redis>=5.2,<7",
 ]
 
 [project.optional-dependencies]
@@ -35,6 +36,7 @@ dev = [
   "pytest-asyncio>=1.1,<2",
   "pytest-cov>=6,<8",
   "ruff>=0.12,<1",
+  "pip-audit>=2.9,<3",
 ]
 
 [tool.setuptools.packages.find]

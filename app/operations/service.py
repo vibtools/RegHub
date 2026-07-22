@@ -4,10 +4,10 @@ import logging
 import re
 import time
 import traceback
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import String, cast, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -16,6 +16,7 @@ from sqlalchemy.orm import selectinload
 from app.core.enums import OperationStatus, TemplateStatus
 from app.core.exceptions import DuplicateTemplateError, NotFoundError, ValidationError
 from app.models.admin_operation import AdminOperation, OperationLog
+from app.operations.queue import RedisOperationQueue
 from app.registry.local import repository_from_manifest, repository_from_zip
 from app.registry.template import TemplateService
 
@@ -80,6 +81,7 @@ class OperationService:
         operation_type: str,
         title: str,
         requested_by: str | None,
+        requested_roles: list[str] | tuple[str, ...] | None = None,
         input_payload: dict[str, Any] | None = None,
         return_url: str | None = None,
         retry_of_id: UUID | None = None,
@@ -91,6 +93,7 @@ class OperationService:
                 status=OperationStatus.QUEUED,
                 progress=0,
                 requested_by=requested_by,
+                requested_roles=[str(item)[:80] for item in list(requested_roles or [])[:50]],
                 input_payload=input_payload or {},
                 return_url=return_url,
                 retry_of_id=retry_of_id,
@@ -312,7 +315,13 @@ class OperationService:
             operation.cancel_requested = True
             await session.commit()
 
-    async def clone_for_retry(self, operation_id: UUID, requested_by: str | None) -> AdminOperation:
+    async def clone_for_retry(
+        self,
+        operation_id: UUID,
+        requested_by: str | None,
+        *,
+        requested_roles: list[str] | tuple[str, ...] | None = None,
+    ) -> AdminOperation:
         original = await self.get(operation_id)
         if original.status not in {OperationStatus.FAILED, OperationStatus.CANCELLED}:
             raise ValidationError("Only failed or cancelled operations can be retried")
@@ -320,12 +329,13 @@ class OperationService:
             operation_type=original.operation_type,
             title=f"Retry: {original.title}"[:240],
             requested_by=requested_by,
+            requested_roles=list(requested_roles or original.requested_roles or []),
             input_payload=original.input_payload,
             return_url=original.return_url,
             retry_of_id=original.id,
         )
 
-    async def recover(self) -> list[UUID]:
+    async def recover(self, *, stale_after_seconds: int = 0) -> list[UUID]:
         queued: list[UUID] = []
         async with self._session_factory() as session:
             rows = list(
@@ -340,32 +350,83 @@ class OperationService:
                 ).all()
             )
             now = datetime.now(UTC)
+            stale_before = now - timedelta(seconds=max(0, stale_after_seconds))
             for item in rows:
-                if item.status == OperationStatus.RUNNING:
-                    item.status = OperationStatus.FAILED
-                    item.error_message = "Operation was interrupted by an application restart"
-                    item.completed_at = now
-                else:
+                if item.status == OperationStatus.QUEUED:
                     queued.append(item.id)
+                    continue
+                started = item.started_at
+                if started is not None and started.tzinfo is None:
+                    started = started.replace(tzinfo=UTC)
+                if stale_after_seconds <= 0 or started is None or started <= stale_before:
+                    item.status = OperationStatus.FAILED
+                    item.error_message = "Operation was interrupted by a worker restart"
+                    item.completed_at = now
             await session.commit()
         return queued
 
+    async def cancel_requested(self, operation_id: UUID) -> bool:
+        async with self._session_factory() as session:
+            value = await session.scalar(
+                select(AdminOperation.cancel_requested).where(AdminOperation.id == operation_id)
+            )
+            return bool(value)
+
+
+class OperationCancellationRequested(Exception):
+    pass
+
 
 class OperationRunner:
-    def __init__(self, service: OperationService) -> None:
+    def __init__(
+        self,
+        service: OperationService,
+        *,
+        backend: str = "inprocess",
+        redis_url: str | None = None,
+        queue_name: str = "reghub:operations",
+        lock_ttl_seconds: int = 900,
+        poll_seconds: float = 1.0,
+    ) -> None:
         self.service = service
+        self.backend = backend
         self._container: ApplicationContainer | None = None
         self._tasks: dict[UUID, asyncio.Task[None]] = {}
         self._shutting_down = False
+        self._worker_process = False
+        self._worker_id = f"worker-{uuid4()}"
+        self._queue = (
+            RedisOperationQueue(
+                redis_url,
+                queue_name=queue_name,
+                lock_ttl_seconds=lock_ttl_seconds,
+                poll_seconds=poll_seconds,
+            )
+            if backend == "redis" and redis_url
+            else None
+        )
+        self.lock_ttl_seconds = lock_ttl_seconds
 
     def bind(self, container: "ApplicationContainer") -> None:
         self._container = container
 
-    async def initialize(self) -> None:
+    async def initialize(self, *, worker_process: bool = False) -> None:
+        self._worker_process = worker_process
+        if self._queue is not None:
+            await self._queue.initialize()
+            if worker_process:
+                for operation_id in await self.service.recover(
+                    stale_after_seconds=self.lock_ttl_seconds
+                ):
+                    await self._queue.enqueue(operation_id)
+            return
         for operation_id in await self.service.recover():
-            self.enqueue(operation_id)
+            await self.enqueue(operation_id)
 
-    def enqueue(self, operation_id: UUID) -> None:
+    async def enqueue(self, operation_id: UUID) -> None:
+        if self._queue is not None:
+            await self._queue.enqueue(operation_id)
+            return
         task = self._tasks.get(operation_id)
         if task and not task.done():
             return
@@ -389,6 +450,88 @@ class OperationRunner:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
+        if self._queue is not None:
+            await self._queue.close()
+
+    async def worker_status(self) -> dict[str, Any] | None:
+        if self._queue is None:
+            return {"backend": "inprocess", "worker": "web-process", "queue_depth": 0}
+        try:
+            return await self._queue.worker_status()
+        except Exception:
+            logger.exception("Unable to read Redis operation worker status")
+            return None
+
+    async def _audit_terminal(
+        self,
+        operation: AdminOperation | None,
+        *,
+        outcome: str,
+        result: dict[str, Any] | None = None,
+        error: str | None = None,
+    ) -> None:
+        if self._container is None or operation is None:
+            return
+        await self._container.audit.append(
+            action=f"operation.{operation.operation_type}",
+            resource_type="admin_operation",
+            resource_id=str(operation.id),
+            outcome=outcome,
+            actor_subject=operation.requested_by,
+            actor_roles=list(operation.requested_roles or []),
+            details={
+                "title": operation.title,
+                "result": _safe_payload(result or {}),
+                "error": _redact_text(error or "") or None,
+            },
+        )
+        if operation.operation_type in {
+            "import_repository",
+            "import_local_manifest",
+            "import_local_zip",
+            "sync_templates",
+            "set_template_status",
+            "generate_thumbnails",
+            "retry_screenshot_jobs",
+        }:
+            await self._container.catalog_cache.invalidate_all()
+
+    async def run_forever(self) -> None:
+        if self._queue is None:
+            raise RuntimeError("The standalone worker requires OPERATION_BACKEND=redis")
+        next_reconcile = 0.0
+        while not self._shutting_down:
+            now = time.monotonic()
+            if now >= next_reconcile:
+                for queued_id in await self.service.recover(
+                    stale_after_seconds=self.lock_ttl_seconds
+                ):
+                    await self._queue.enqueue(queued_id)
+                next_reconcile = now + 60.0
+            await self._queue.heartbeat(
+                self._worker_id,
+                {"backend": "redis", "status": "idle", "timestamp": datetime.now(UTC).isoformat()},
+            )
+            operation_id = await self._queue.dequeue()
+            if operation_id is None:
+                continue
+            if not await self._queue.acquire_lock(operation_id, self._worker_id):
+                await asyncio.sleep(min(1.0, self._queue.poll_seconds))
+                await self._queue.enqueue(operation_id)
+                continue
+            await self._queue.heartbeat(
+                self._worker_id,
+                {
+                    "backend": "redis",
+                    "status": "running",
+                    "operation_id": str(operation_id),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+            try:
+                await self._execute(operation_id)
+            finally:
+                await self._queue.release_lock(operation_id, self._worker_id)
 
     async def _log(
         self,
@@ -398,17 +541,38 @@ class OperationRunner:
         level: str = "info",
         data: dict[str, Any] | None = None,
     ) -> None:
+        if await self.service.cancel_requested(operation_id):
+            raise OperationCancellationRequested
         await self.service.append_log(
             operation_id, message, level=level, data=data, progress=progress
         )
+        if self._queue is not None:
+            await self._queue.refresh_lock(operation_id, self._worker_id)
+            await self._queue.heartbeat(
+                self._worker_id,
+                {
+                    "backend": "redis",
+                    "status": "running",
+                    "operation_id": str(operation_id),
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
 
     async def _execute(self, operation_id: UUID) -> None:
         started = time.perf_counter()
         stage = "bootstrap"
+        operation: AdminOperation | None = None
         try:
             if self._container is None:
                 raise RuntimeError("Operation runner is not bound to the application container")
+            if self._worker_process:
+                # Runtime Settings are controlled by the web process but stored in PostgreSQL.
+                # Refresh integrations and feature gates at every durable job boundary so a
+                # standalone Redis worker applies Settings changes without a redeploy/restart.
+                await self._container.reload_runtime(preserve_inflight=False)
             operation = await self.service.get(operation_id)
+            if operation.status in _TERMINAL:
+                return
             await self.service.mark_running(operation_id)
             await self._log(
                 operation_id,
@@ -452,6 +616,7 @@ class OperationRunner:
                 {"elapsed_ms": elapsed_ms, "result": _safe_payload(result)},
             )
             await self.service.complete(operation_id, result)
+            await self._audit_terminal(operation, outcome="succeeded", result=result)
         except DuplicateTemplateError as exc:
             elapsed_ms = int((time.perf_counter() - started) * 1000)
             await self._log(
@@ -465,17 +630,22 @@ class OperationRunner:
                     "template_slug": exc.template_slug,
                 },
             )
+            skipped_result = {
+                "outcome": "already_exists",
+                "template_id": str(exc.template_id),
+                "template_slug": exc.template_slug,
+                "template_name": exc.template_name,
+                "template_url": f"/admin/template/details/{exc.template_id}",
+            }
             await self.service.skip(
                 operation_id,
                 "No import was required: this repository is already registered in RegHub.",
-                {
-                    "outcome": "already_exists",
-                    "template_id": str(exc.template_id),
-                    "template_slug": exc.template_slug,
-                    "template_name": exc.template_name,
-                    "template_url": f"/admin/template/details/{exc.template_id}",
-                },
+                skipped_result,
             )
+            await self._audit_terminal(operation, outcome="skipped", result=skipped_result)
+        except OperationCancellationRequested:
+            await self.service.cancel(operation_id, "Operation cancelled by administrator")
+            await self._audit_terminal(operation, outcome="cancelled")
         except asyncio.CancelledError:
             if self._shutting_down:
                 await self.service.fail(
@@ -483,6 +653,7 @@ class OperationRunner:
                 )
             else:
                 await self.service.cancel(operation_id)
+            await self._audit_terminal(operation, outcome="cancelled")
         except Exception as exc:
             logger.exception("Admin operation %s failed", operation_id)
             elapsed_ms = int((time.perf_counter() - started) * 1000)
@@ -499,6 +670,11 @@ class OperationRunner:
                 },
             )
             await self.service.fail(operation_id, _redact_text(str(exc)))
+            await self._audit_terminal(
+                operation,
+                outcome="failed",
+                error=f"{exc.__class__.__name__}: {_redact_text(str(exc))}",
+            )
 
     async def _dispatch(self, operation: AdminOperation) -> dict[str, Any]:
         handlers = {

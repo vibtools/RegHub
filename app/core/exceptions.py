@@ -32,5 +32,9 @@ class AuthorizationError(RegistryError):
     pass
 
 
+class PermissionDeniedError(AuthorizationError):
+    pass
+
+
 class FeatureDisabledError(RegistryError):
     pass

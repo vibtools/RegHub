@@ -102,6 +102,11 @@ class CapabilitiesRead(BaseModel):
     public_api_enabled: bool = True
     api_access_mode: str = "development"
     service_token_required: bool = False
+    operation_backend: str = "inprocess"
+    cache_backend: str = "disabled"
+    rate_limit_backend: str = "memory"
+    rbac_enabled: bool = False
+    immutable_audit_enabled: bool = False
 
 
 class TemplateAssetRead(BaseModel):

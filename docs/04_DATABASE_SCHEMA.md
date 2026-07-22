@@ -67,3 +67,11 @@ Stores enabled IP, CIDR, or hostname rules with optional notes and audit identit
 
 Migration `20260721_0005_api_access_operations` creates these tables only. No existing table,
 column, index, or record is removed or renamed.
+
+## v0.3.0 governance additions
+
+- `admin_operations.requested_roles` records the requesting administrator roles used by audit.
+- `audit_chain_states` serializes append order and stores the latest signed chain hash.
+- `audit_events` is an append-only, HMAC-signed chain with actor, roles, action, resource, request,
+  client, redacted details, signing-key ID and previous/event hashes.
+- Catalog ordering indexes and a PostgreSQL GIN index on `templates.topics` support larger catalogs.

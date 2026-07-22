@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.core.security import (
     AdminIdentity,
     AdminTokenSigner,
@@ -11,6 +11,7 @@ from app.core.security import (
     get_nested_claim,
     sanitize_relative_redirect,
 )
+from app.governance.rbac import resolve_roles
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -20,7 +21,7 @@ def _signer() -> AdminTokenSigner:
     return AdminTokenSigner(settings.session_secret.get_secret_value())
 
 
-def _identity_from_claims(claims: dict[str, Any]) -> AdminIdentity:
+def _identity_from_claims(claims: dict[str, Any], settings: Settings) -> AdminIdentity:
     subject = claims.get("sub")
     if not isinstance(subject, str) or not subject:
         raise HTTPException(status_code=401, detail="OIDC identity does not contain a subject")
@@ -29,6 +30,7 @@ def _identity_from_claims(claims: dict[str, Any]) -> AdminIdentity:
         email=claims.get("email") if isinstance(claims.get("email"), str) else None,
         name=claims.get("name") if isinstance(claims.get("name"), str) else None,
         claims={},
+        roles=resolve_roles(claims, settings),
     )
 
 
@@ -61,10 +63,27 @@ async def callback(request: Request):
         claims = await client.userinfo(token=token)
         claims = dict(claims)
     claim_value = get_nested_claim(claims, settings.oidc_admin_claim)
-    if not claim_matches(claim_value, settings.oidc_admin_values):
+    identity = _identity_from_claims(claims, settings)
+    legacy_authorized = claim_matches(claim_value, settings.oidc_admin_values)
+    if not legacy_authorized and not identity.roles:
+        await request.app.state.container.audit.append(
+            action="auth.login",
+            resource_type="administrator_session",
+            resource_id=identity.subject,
+            outcome="denied",
+            actor_subject=identity.subject,
+            actor_email=identity.email,
+            request=request,
+            details={"reason": "No authorized RegHub role"},
+        )
         raise HTTPException(status_code=403, detail="This identity is not authorized for RegHub")
-
-    identity = _identity_from_claims(claims)
+    await request.app.state.container.audit.append(
+        action="auth.login",
+        resource_type="administrator_session",
+        resource_id=identity.subject,
+        identity=identity,
+        request=request,
+    )
     target = sanitize_relative_redirect(request.session.pop("post_login_redirect", None))
     response = RedirectResponse(target, status_code=status.HTTP_302_FOUND)
     response.set_cookie(
@@ -80,7 +99,18 @@ async def callback(request: Request):
 
 
 @router.get("/logout", name="auth_logout")
-async def logout():
+async def logout(request: Request):
+    settings = get_settings()
+    token = request.cookies.get("reghub_auth")
+    identity = _signer().verify(token, settings.session_max_age_seconds) if token else None
+    if identity is not None:
+        await request.app.state.container.audit.append(
+            action="auth.logout",
+            resource_type="administrator_session",
+            resource_id=identity.subject,
+            identity=identity,
+            request=request,
+        )
     response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
     response.delete_cookie("reghub_auth", path="/")
     return response
@@ -98,4 +128,5 @@ async def me(request: Request):
         "subject": identity.subject,
         "email": identity.email,
         "name": identity.name,
+        "roles": list(identity.roles),
     }

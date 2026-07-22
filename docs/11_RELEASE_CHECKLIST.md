@@ -45,3 +45,19 @@
 - IP/CIDR/hostname block rules can be added, edited, disabled, and deleted.
 - API endpoint check reports health, readiness, catalog, capabilities, and resource status.
 - Health/readiness and administrator recovery surfaces remain reachable.
+
+## v0.3.0 infrastructure and governance checks
+
+- Legacy `reghub-admin` still receives Super Admin access.
+- Viewer/Editor/Publisher/Security Admin permissions match the documented matrix.
+- Retry cannot replay an operation without its original task permission.
+- Audit chain verifies and detects a modified event; sensitive nested details are redacted.
+- In-process operation mode works without Redis.
+- Redis worker mode preserves queued work and reports heartbeat/readiness.
+- Cache invalidates after import, sync, publication and media changes.
+- Redis cache/rate-limit runtime failure degrades safely to memory.
+- Untrusted peers cannot spoof forwarding headers; configured proxy chains resolve the client IP.
+- API rate limits return structured 429 and standard/legacy headers.
+- Existing v0.2.x runtime secrets decrypt after upgrade.
+- Alembic upgrades a v0.2.3.4 database without destructive DDL.
+- GitHub CI PostgreSQL/Redis, dependency audit and Docker smoke gates pass.

@@ -1,5 +1,20 @@
 # Test Strategy
 
-Unit tests cover URL normalization, manifest validation, token signing, and framework detection.
-Integration tests cover status transitions and public visibility against an isolated SQLite database.
-Production release requires lint, tests, compile check, migration upgrade, and endpoint smoke tests.
+## Unit and regression
+
+- analyzers, manifests, provider URLs, import/sync, Settings, Operations and API behavior;
+- RBAC role/permission mapping and legacy cookie compatibility;
+- versioned encryption/audit keyrings and nested secret redaction;
+- cache generation, rate limits and trusted-proxy normalization;
+- immutable audit-chain tamper detection.
+
+## Integration
+
+GitHub Actions starts PostgreSQL and Redis, upgrades Alembic, runs the idempotent seed and executes
+the test suite with a 70% application coverage floor.
+
+## Delivery
+
+CI also runs Ruff, Python compilation, dependency vulnerability audit, Docker image build, container
+startup and health verification. Live deployment verification still covers Keycloak, provider
+credentials, Coolify proxy networks, worker heartbeat, backups and rollback.

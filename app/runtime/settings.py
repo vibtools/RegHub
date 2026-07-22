@@ -42,30 +42,60 @@ class EffectiveIntegration:
 
 
 class SecretCipher:
-    """Encrypt runtime credentials with a key derived from the existing server secret."""
+    """Versioned Fernet keyring with transparent v0.2.x compatibility."""
 
-    def __init__(self, master_secret: str) -> None:
-        digest = hashlib.sha256(
-            ("reghub-runtime-settings-v1:" + master_secret).encode("utf-8")
-        ).digest()
-        self._fernet = Fernet(base64.urlsafe_b64encode(digest))
+    def __init__(self, keys: list[str]) -> None:
+        if not keys:
+            raise ValidationError("At least one runtime encryption key is required")
+        self._keys: list[tuple[str, Fernet]] = []
+        for raw in keys:
+            digest = hashlib.sha256(
+                ("reghub-runtime-settings-v2:" + raw).encode("utf-8")
+            ).digest()
+            key_id = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+            self._keys.append((key_id, Fernet(base64.urlsafe_b64encode(digest))))
+        self._legacy: list[Fernet] = []
+        for raw in keys:
+            digest = hashlib.sha256(
+                ("reghub-runtime-settings-v1:" + raw).encode("utf-8")
+            ).digest()
+            self._legacy.append(Fernet(base64.urlsafe_b64encode(digest)))
+
+    @property
+    def primary_key_id(self) -> str:
+        return self._keys[0][0]
 
     def encrypt(self, value: str) -> str:
-        return "fernet:v1:" + self._fernet.encrypt(value.encode("utf-8")).decode("ascii")
+        key_id, cipher = self._keys[0]
+        token = cipher.encrypt(value.encode("utf-8")).decode("ascii")
+        return f"fernet:v2:{key_id}:{token}"
 
     def decrypt(self, value: str | None) -> str | None:
         if not value:
             return None
-        if not value.startswith("fernet:v1:"):
+        candidates: list[Fernet] = []
+        token = value
+        if value.startswith("fernet:v2:"):
+            try:
+                _, _, key_id, token = value.split(":", 3)
+            except ValueError as exc:
+                raise ValidationError("Stored integration secret uses an invalid format") from exc
+            candidates.extend(cipher for item_id, cipher in self._keys if item_id == key_id)
+            candidates.extend(cipher for item_id, cipher in self._keys if item_id != key_id)
+        elif value.startswith("fernet:v1:"):
+            token = value.removeprefix("fernet:v1:")
+            candidates.extend(self._legacy)
+        else:
             raise ValidationError("Stored integration secret uses an unsupported format")
-        try:
-            return self._fernet.decrypt(value.removeprefix("fernet:v1:").encode("ascii")).decode(
-                "utf-8"
-            )
-        except (InvalidToken, UnicodeDecodeError) as exc:
-            raise ValidationError(
-                "Stored integration secret cannot be decrypted. Check SESSION_SECRET continuity."
-            ) from exc
+
+        for cipher in candidates:
+            try:
+                return cipher.decrypt(token.encode("ascii")).decode("utf-8")
+            except (InvalidToken, UnicodeDecodeError):
+                continue
+        raise ValidationError(
+            "Stored integration secret cannot be decrypted. Check runtime key continuity."
+        )
 
 
 class RuntimeSettingsService:
@@ -92,7 +122,7 @@ class RuntimeSettingsService:
     ) -> None:
         self._session_factory = session_factory
         self._settings = settings
-        self._cipher = SecretCipher(settings.session_secret.get_secret_value())
+        self._cipher = SecretCipher(settings.runtime_keyring)
         self._features: dict[str, tuple[bool, bool]] = {}
         self._integrations: dict[str, EffectiveIntegration] = {}
         self.FEATURE_DEFINITIONS = self._build_definitions(settings)
@@ -312,6 +342,10 @@ class RuntimeSettingsService:
                 source="runtime",
             )
         self._integrations = effective
+
+    @property
+    def primary_encryption_key_id(self) -> str:
+        return self._cipher.primary_key_id
 
     def feature_enabled(self, key: str, *, task: bool = False) -> bool:
         enabled, task_allowed = self._features.get(key, (False, False))

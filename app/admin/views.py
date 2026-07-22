@@ -28,8 +28,10 @@ from app.core.enums import (
     ScreenshotJobStatus,
     TemplateStatus,
 )
-from app.core.exceptions import RegistryError, ValidationError
+from app.core.exceptions import PermissionDeniedError, RegistryError, ValidationError
 from app.database.session import async_session_factory
+from app.governance.rbac import has_permission, permissions_for_roles, require_permission
+from app.models.audit_event import AuditEvent
 from app.models.category import Category
 from app.models.framework import Framework
 from app.models.import_history import ImportHistory
@@ -49,6 +51,21 @@ _TERMINAL_OPERATION_VALUES = {
     OperationStatus.CANCELLED.value,
     OperationStatus.SKIPPED.value,
 }
+_OPERATION_PERMISSIONS = {
+    "import_repository": "imports.run",
+    "import_local_manifest": "imports.run",
+    "import_local_zip": "imports.run",
+    "sync_templates": "sync.run",
+    "set_template_status": "publication.manage",
+    "generate_thumbnails": "media.write",
+    "retry_screenshot_jobs": "media.write",
+}
+
+
+def _operation_permission(operation_type: str) -> str:
+    return _OPERATION_PERMISSIONS.get(operation_type, "operations.run")
+
+
 _SETTINGS_PANES = {"features-pane", "integrations-pane", "api-manage-pane", "custom-api-pane"}
 _SETTINGS_ACTION_PANES = {
     "save_features": "features-pane",
@@ -145,7 +162,48 @@ def _write_temporary_zip(data: bytes) -> str:
         return handle.name
 
 
-class CategoryAdmin(ModelView, model=Category):
+class GovernedModelView(ModelView):
+    mutation_permission = "templates.write"
+
+    def is_accessible(self, request: Request) -> bool:
+        identity = getattr(request.state, "admin_identity", None)
+        return bool(identity and has_permission(identity, "registry.read"))
+
+    async def on_model_change(
+        self, data: dict[str, object], model: object, is_created: bool, request: Request
+    ) -> None:
+        require_permission(request, self.mutation_permission)
+
+    async def after_model_change(
+        self, data: dict[str, object], model: object, is_created: bool, request: Request
+    ) -> None:
+        identity = require_permission(request, self.mutation_permission)
+        await request.app.state.container.audit.append(
+            action="admin.create" if is_created else "admin.update",
+            resource_type=getattr(model, "__tablename__", model.__class__.__name__),
+            resource_id=str(getattr(model, "id", "")) or None,
+            identity=identity,
+            request=request,
+            details={"fields": sorted(data)},
+        )
+        await request.app.state.container.catalog_cache.invalidate_all()
+
+    async def on_model_delete(self, model: object, request: Request) -> None:
+        require_permission(request, self.mutation_permission)
+
+    async def after_model_delete(self, model: object, request: Request) -> None:
+        identity = require_permission(request, self.mutation_permission)
+        await request.app.state.container.audit.append(
+            action="admin.delete",
+            resource_type=getattr(model, "__tablename__", model.__class__.__name__),
+            resource_id=str(getattr(model, "id", "")) or None,
+            identity=identity,
+            request=request,
+        )
+        await request.app.state.container.catalog_cache.invalidate_all()
+
+
+class CategoryAdmin(GovernedModelView, model=Category):
     name = "Category"
     name_plural = "Categories"
     icon = "fa-solid fa-folder-tree"
@@ -155,7 +213,7 @@ class CategoryAdmin(ModelView, model=Category):
     form_excluded_columns = [Category.templates, Category.created_at, Category.updated_at]
 
 
-class ProviderAdmin(ModelView, model=Provider):
+class ProviderAdmin(GovernedModelView, model=Provider):
     icon = "fa-solid fa-building"
     column_list = [Provider.name, Provider.slug, Provider.provider_type, Provider.is_active]
     column_searchable_list = [Provider.name, Provider.slug, Provider.website_url]
@@ -178,7 +236,7 @@ class ProviderAdmin(ModelView, model=Provider):
     form_excluded_columns = [Provider.templates, Provider.created_at, Provider.updated_at]
 
 
-class FrameworkAdmin(ModelView, model=Framework):
+class FrameworkAdmin(GovernedModelView, model=Framework):
     icon = "fa-solid fa-layer-group"
     column_list = [Framework.name, Framework.slug, Framework.is_active, Framework.updated_at]
     column_searchable_list = [Framework.name, Framework.slug, Framework.website_url]
@@ -193,7 +251,7 @@ class FrameworkAdmin(ModelView, model=Framework):
     form_excluded_columns = [Framework.templates, Framework.created_at, Framework.updated_at]
 
 
-class TemplateAdmin(ModelView, model=Template):
+class TemplateAdmin(GovernedModelView, model=Template):
     icon = "fa-solid fa-cubes"
     column_list = [
         Template.name,
@@ -281,16 +339,18 @@ class TemplateAdmin(ModelView, model=Template):
         title: str,
         payload: dict[str, object],
     ) -> RedirectResponse:
+        require_permission(request, _operation_permission(operation_type))
         container = self._admin_ref.app.state.container
         container.require_feature("operations_console", task=True)
         operation = await container.operation_service.create(
             operation_type=operation_type,
             title=title,
             requested_by=request.state.admin_identity.subject,
+            requested_roles=list(request.state.admin_identity.roles),
             input_payload=payload,
             return_url=_safe_admin_return_url(request),
         )
-        container.operation_runner.enqueue(operation.id)
+        await container.operation_runner.enqueue(operation.id)
         return RedirectResponse(_operation_url(operation.id), status_code=302)
 
     async def _set_status(self, request: Request, status: TemplateStatus):
@@ -455,6 +515,55 @@ class SyncHistoryAdmin(ModelView, model=SyncHistory):
     can_view_details = True
 
 
+class AuditEventAdmin(ModelView, model=AuditEvent):
+    name = "Audit Event"
+    name_plural = "Audit Trail"
+    icon = "fa-solid fa-shield-halved"
+
+    def is_accessible(self, request: Request) -> bool:
+        identity = getattr(request.state, "admin_identity", None)
+        return bool(identity and has_permission(identity, "audit.read"))
+
+    column_list = [
+        AuditEvent.sequence,
+        AuditEvent.occurred_at,
+        AuditEvent.actor_subject,
+        AuditEvent.action,
+        AuditEvent.resource_type,
+        AuditEvent.resource_id,
+        AuditEvent.outcome,
+        AuditEvent.request_id,
+    ]
+    column_searchable_list = [
+        AuditEvent.actor_subject,
+        AuditEvent.actor_email,
+        AuditEvent.action,
+        AuditEvent.resource_type,
+        AuditEvent.resource_id,
+        AuditEvent.request_id,
+        AuditEvent.event_hash,
+    ]
+    column_sortable_list = [
+        AuditEvent.sequence,
+        AuditEvent.occurred_at,
+        AuditEvent.action,
+        AuditEvent.outcome,
+    ]
+    column_default_sort = [(AuditEvent.sequence, True)]
+    column_filters = [
+        StaticValuesFilter(
+            AuditEvent.outcome,
+            [(value, value.title()) for value in ["succeeded", "failed", "skipped", "cancelled"]],
+            title="Outcome",
+        )
+    ]
+    can_create = False
+    can_edit = False
+    can_delete = False
+    can_view_details = True
+    can_export = True
+
+
 class TemplateVersionAdmin(ModelView, model=TemplateVersion):
     name_plural = "Template Versions"
     icon = "fa-solid fa-code-branch"
@@ -561,16 +670,18 @@ class ScreenshotJobAdmin(ModelView, model=ScreenshotJob):
                 URL(return_url).include_query_params(error="No screenshot jobs were selected"),
                 status_code=302,
             )
+        require_permission(request, "media.write")
         container = self._admin_ref.app.state.container
         container.require_feature("operations_console", task=True)
         operation = await container.operation_service.create(
             operation_type="retry_screenshot_jobs",
             title=f"Retry {len(identifiers)} screenshot job(s)",
             requested_by=request.state.admin_identity.subject,
+            requested_roles=list(request.state.admin_identity.roles),
             input_payload={"job_ids": [str(value) for value in identifiers]},
             return_url=return_url,
         )
-        container.operation_runner.enqueue(operation.id)
+        await container.operation_runner.enqueue(operation.id)
         return RedirectResponse(_operation_url(operation.id), status_code=302)
 
 
@@ -607,16 +718,18 @@ class _AdminBaseView(BaseView):
         payload: dict[str, object],
         return_url: str,
     ) -> RedirectResponse:
+        require_permission(request, _operation_permission(operation_type))
         container = self._admin_ref.app.state.container
         container.require_feature("operations_console", task=True)
         operation = await container.operation_service.create(
             operation_type=operation_type,
             title=title,
             requested_by=request.state.admin_identity.subject,
+            requested_roles=list(request.state.admin_identity.roles),
             input_payload=payload,
             return_url=return_url,
         )
-        container.operation_runner.enqueue(operation.id)
+        await container.operation_runner.enqueue(operation.id)
         return RedirectResponse(_operation_url(operation.id), status_code=302)
 
 
@@ -626,6 +739,7 @@ class OperationsConsoleView(_AdminBaseView):
 
     @expose("/operations", methods=["GET"])
     async def operations(self, request: Request):
+        require_permission(request, "registry.read")
         container = self._admin_ref.app.state.container
         search = (request.query_params.get("q") or "").strip()
         status = (request.query_params.get("status") or "").strip()
@@ -657,10 +771,18 @@ class OperationsConsoleView(_AdminBaseView):
 
     @expose("/operations/clear", methods=["POST"])
     async def clear_operations(self, request: Request):
+        identity = require_permission(request, "operations.manage")
         form = await request.form()
         self._validate_csrf(form, self._csrf(request, "operation_list_csrf"))
-        count = await self._admin_ref.app.state.container.operation_service.clear_terminal(
-            str(form.get("scope", "all_terminal"))
+        container = self._admin_ref.app.state.container
+        scope = str(form.get("scope", "all_terminal"))
+        count = await container.operation_service.clear_terminal(scope)
+        await container.audit.append(
+            action="operations.clear",
+            resource_type="admin_operation",
+            identity=identity,
+            request=request,
+            details={"scope": scope, "deleted_count": count},
         )
         return RedirectResponse(
             URL("/admin/operations").include_query_params(
@@ -671,6 +793,7 @@ class OperationsConsoleView(_AdminBaseView):
 
     @expose("/operations/{operation_id}", methods=["GET"])
     async def operation_detail(self, request: Request):
+        require_permission(request, "registry.read")
         operation_id = UUID(request.path_params["operation_id"])
         operation = await self._admin_ref.app.state.container.operation_service.get(
             operation_id, with_logs=True
@@ -692,6 +815,7 @@ class OperationsConsoleView(_AdminBaseView):
 
     @expose("/operations/{operation_id}/status", methods=["GET"])
     async def operation_status(self, request: Request):
+        require_permission(request, "registry.read")
         container = self._admin_ref.app.state.container
         operation = await container.operation_service.get(UUID(request.path_params["operation_id"]))
         template_summary = await _operation_template_summary(container, operation)
@@ -711,6 +835,7 @@ class OperationsConsoleView(_AdminBaseView):
 
     @expose("/operations/{operation_id}/logs.json", methods=["GET"])
     async def operation_logs_json(self, request: Request):
+        require_permission(request, "registry.read")
         operation_id = UUID(request.path_params["operation_id"])
         try:
             sequence = max(0, int(request.query_params.get("after", "0") or 0))
@@ -740,6 +865,7 @@ class OperationsConsoleView(_AdminBaseView):
 
     @expose("/operations/{operation_id}/events", methods=["GET"])
     async def operation_events(self, request: Request):
+        require_permission(request, "registry.read")
         operation_id = UUID(request.path_params["operation_id"])
         container = self._admin_ref.app.state.container
         service = container.operation_service
@@ -799,6 +925,7 @@ class OperationsConsoleView(_AdminBaseView):
 
     @expose("/operations/{operation_id}/logs.txt", methods=["GET"])
     async def operation_logs(self, request: Request):
+        require_permission(request, "registry.read")
         operation = await self._admin_ref.app.state.container.operation_service.get(
             UUID(request.path_params["operation_id"]), with_logs=True
         )
@@ -833,14 +960,20 @@ class OperationsConsoleView(_AdminBaseView):
         form = await request.form()
         self._validate_csrf(form, csrf)
         container = self._admin_ref.app.state.container
+        original_id = UUID(request.path_params["operation_id"])
+        original = await container.operation_service.get(original_id)
+        identity = require_permission(request, _operation_permission(original.operation_type))
         operation = await container.operation_service.clone_for_retry(
-            UUID(request.path_params["operation_id"]), request.state.admin_identity.subject
+            original_id,
+            identity.subject,
+            requested_roles=list(identity.roles),
         )
-        container.operation_runner.enqueue(operation.id)
+        await container.operation_runner.enqueue(operation.id)
         return RedirectResponse(_operation_url(operation.id), status_code=302)
 
     @expose("/operations/{operation_id}/continue-update", methods=["POST"])
     async def continue_duplicate_update(self, request: Request):
+        require_permission(request, "sync.run")
         csrf = self._csrf(request, "operation_action_csrf")
         form = await request.form()
         self._validate_csrf(form, csrf)
@@ -861,11 +994,12 @@ class OperationsConsoleView(_AdminBaseView):
             operation_type="sync_templates",
             title=f"Update imported template: {template_name}",
             requested_by=request.state.admin_identity.subject,
+            requested_roles=list(request.state.admin_identity.roles),
             input_payload={"template_ids": [str(template_id)]},
             return_url=f"/admin/template/details/{template_id}",
             retry_of_id=source.id,
         )
-        container.operation_runner.enqueue(operation.id)
+        await container.operation_runner.enqueue(operation.id)
         return RedirectResponse(_operation_url(operation.id), status_code=302)
 
     @expose("/operations/{operation_id}/cancel", methods=["POST"])
@@ -874,20 +1008,75 @@ class OperationsConsoleView(_AdminBaseView):
         form = await request.form()
         self._validate_csrf(form, csrf)
         operation_id = UUID(request.path_params["operation_id"])
-        await self._admin_ref.app.state.container.operation_runner.request_cancel(operation_id)
+        container = self._admin_ref.app.state.container
+        operation = await container.operation_service.get(operation_id)
+        identity = require_permission(request, "operations.run")
+        if operation.requested_by != identity.subject and not has_permission(
+            identity, "operations.manage"
+        ):
+            raise PermissionDeniedError(
+                "Only the requester or an operations administrator can cancel this task"
+            )
+        await container.operation_runner.request_cancel(operation_id)
         return RedirectResponse(_operation_url(operation_id), status_code=302)
 
 
+class GovernanceView(_AdminBaseView):
+    def is_accessible(self, request: Request) -> bool:
+        identity = getattr(request.state, "admin_identity", None)
+        return bool(identity and has_permission(identity, "audit.read"))
+
+    name = "Governance"
+    icon = "fa-solid fa-user-shield"
+
+    @expose("/governance", methods=["GET"])
+    async def governance(self, request: Request):
+        identity = require_permission(request, "audit.read")
+        container = self._admin_ref.app.state.container
+        verification = await container.audit.verify()
+        worker_status = await container.operation_runner.worker_status()
+        settings = container.settings
+        return await self.templates.TemplateResponse(
+            request,
+            "governance.html",
+            {
+                "title": "Production Governance",
+                "identity": identity,
+                "permissions": sorted(permissions_for_roles(identity.roles)),
+                "audit_verification": verification,
+                "worker_status": worker_status,
+                "operation_backend": settings.operation_backend,
+                "cache_backend": container.catalog_cache.backend_name,
+                "rate_limit_backend": container.rate_limiter.backend_name,
+                "trusted_proxy_networks": settings.trusted_proxy_networks,
+                "dedicated_runtime_key": bool(settings.runtime_encryption_key),
+                "dedicated_audit_key": bool(settings.audit_signing_key),
+                "primary_runtime_key_id": container.runtime_settings.primary_encryption_key_id,
+                "primary_audit_key_id": container.audit.primary_key_id,
+            },
+        )
+
+
 class SettingsView(_AdminBaseView):
+    def is_accessible(self, request: Request) -> bool:
+        identity = getattr(request.state, "admin_identity", None)
+        return bool(identity and has_permission(identity, "settings.manage"))
+
     name = "Settings"
     icon = "fa-solid fa-sliders"
 
     @staticmethod
     def _bool(form: object, key: str) -> bool:
-        return str(form.get(key, "")).casefold() in {"1", "true", "on", "yes"}  # type: ignore[attr-defined]
+        return str(form.get(key, "")).casefold() in {  # type: ignore[attr-defined]
+            "1",
+            "true",
+            "on",
+            "yes",
+        }
 
     @expose("/settings", methods=["GET", "POST"])
     async def settings(self, request: Request):
+        require_permission(request, "settings.manage")
         csrf_token = self._csrf(request, "settings_csrf")
         container = self._admin_ref.app.state.container
         api_access = getattr(container, "api_access", None)
@@ -1008,6 +1197,14 @@ class SettingsView(_AdminBaseView):
                     success = "API block rule deleted."
                 else:
                     raise ValidationError("Unsupported settings action")
+                await container.catalog_cache.invalidate_all()
+                await container.audit.append(
+                    action=f"settings.{action_name}",
+                    resource_type="runtime_settings",
+                    identity=request.state.admin_identity,
+                    request=request,
+                    details={"active_pane": active_pane},
+                )
             except json.JSONDecodeError:
                 error = "Integration config JSON is invalid"
             except (RegistryError, ValueError) as exc:
@@ -1079,6 +1276,7 @@ class SettingsView(_AdminBaseView):
 
     @expose("/settings/api-check", methods=["POST"])
     async def api_check(self, request: Request):
+        require_permission(request, "api.manage")
         form = await request.form()
         self._validate_csrf(form, self._csrf(request, "settings_csrf"))
         container = self._admin_ref.app.state.container
@@ -1207,6 +1405,9 @@ class GitHubImportView(_AdminBaseView):
 
     @expose("/github-import", methods=["GET", "POST"])
     async def github_import(self, request: Request):
+        require_permission(request, "registry.read")
+        if request.method == "POST":
+            require_permission(request, "imports.run")
         csrf_token = self._csrf(request, "github_import_csrf")
         categories, providers = await self._choices()
         container = self._admin_ref.app.state.container
@@ -1251,6 +1452,9 @@ class RegistryImportView(_AdminBaseView):
 
     @expose("/registry-import", methods=["GET", "POST"])
     async def registry_import(self, request: Request):
+        require_permission(request, "registry.read")
+        if request.method == "POST":
+            require_permission(request, "imports.run")
         csrf_token = self._csrf(request, "registry_import_csrf")
         categories, providers = await self._choices()
         container = self._admin_ref.app.state.container
@@ -1296,6 +1500,9 @@ class LocalImportView(_AdminBaseView):
 
     @expose("/local-import", methods=["GET", "POST"])
     async def local_import(self, request: Request):
+        require_permission(request, "registry.read")
+        if request.method == "POST":
+            require_permission(request, "imports.run")
         csrf_token = self._csrf(request, "local_import_csrf")
         categories, providers = await self._choices()
         container = self._admin_ref.app.state.container
@@ -1361,6 +1568,9 @@ class AssetGalleryView(_AdminBaseView):
 
     @expose("/asset-gallery", methods=["GET", "POST"])
     async def asset_gallery(self, request: Request):
+        require_permission(request, "registry.read")
+        if request.method == "POST":
+            require_permission(request, "media.write")
         csrf_token = self._csrf(request, "asset_gallery_csrf")
         selected_template_id = request.query_params.get("template_id")
         success: str | None = None
@@ -1400,6 +1610,15 @@ class AssetGalleryView(_AdminBaseView):
                     else:
                         raise ValidationError("Unsupported gallery action")
                 selected_template_id = str(template_id)
+                await container.catalog_cache.invalidate_all()
+                await container.audit.append(
+                    action=f"asset.{action_name}",
+                    resource_type="template_asset",
+                    resource_id=str(template_id),
+                    identity=request.state.admin_identity,
+                    request=request,
+                    details={"kind": str(form.get("kind", ""))},
+                )
             except (RegistryError, ValueError) as exc:
                 error = str(exc)
             except Exception:

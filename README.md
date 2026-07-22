@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.2.3.4 Import Experience Hotfix**
+Current release: **v0.3.0 Production Infrastructure & Governance**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -13,6 +13,23 @@ deploy user projects.
 - Deployment: `ygit.net`
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
+
+## v0.3.0 production infrastructure and governance
+
+All v0.2.3.4 registry, import, Settings, Operations, API access, Keycloak, template and database
+behavior remains compatible.
+
+- Added optional Redis-backed durable operations with a standalone worker. The default remains
+  `inprocess`, so the current Coolify service can be upgraded without Redis.
+- Added Redis/in-memory catalog cache, generation invalidation and runtime failover.
+- Added trusted-proxy normalization and per-IP, per-token and administrator rate limiting.
+- Added Keycloak RBAC for Viewer, Editor, Publisher, Security Admin and Super Admin while preserving
+  legacy `reghub-admin` access.
+- Added a read-only, HMAC-signed hash-chain audit trail and `/admin/governance` posture dashboard.
+- Added versioned runtime/audit keyrings with v0.2.x secret-decryption compatibility.
+- Added PostgreSQL/Redis integration CI, migration/seed validation, dependency audit and Docker smoke.
+- Added additive migration `20260721_0006_production_governance`; no existing route, field, record or
+  deployment boundary was removed.
 
 ## v0.2.3.4 hotfix
 
@@ -87,8 +104,9 @@ The Settings page manages:
 - Scoped service tokens and IP/CIDR/hostname block rules
 - Live API endpoint checks
 
-Runtime secrets are encrypted with a key derived from `SESSION_SECRET`. Keep `SESSION_SECRET`
-unchanged across deployments or previously stored runtime credentials cannot be decrypted.
+Runtime secrets use a versioned encryption keyring. Existing v0.2.x credentials remain readable
+through the unchanged `SESSION_SECRET`; production should add an independent
+`RUNTIME_ENCRYPTION_KEY` and retain previous keys during rotation.
 
 ## Security model
 
@@ -128,4 +146,5 @@ GET /api/v1/ready
 5. The entrypoint runs `alembic upgrade head` and `python -m scripts.seed` automatically.
 6. Verify health, readiness, tag filtering, Operations, and Settings.
 
-See `docs/29_V0.2.3.4_IMPORT_EXPERIENCE_HOTFIX.md` and `docs/30_V0.2.3.4_UPGRADE.md`.
+See `docs/31_V0.3.0_PRODUCTION_INFRASTRUCTURE_GOVERNANCE.md`,
+`docs/32_V0.3.0_UPGRADE.md` and `docs/33_V0.3.0_RBAC_AUDIT.md`.

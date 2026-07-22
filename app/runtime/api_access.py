@@ -52,6 +52,7 @@ class ApiAccessService:
         self._tokens: tuple[ApiServiceToken, ...] = ()
         self._block_rules: tuple[ApiBlockRule, ...] = ()
         self._ephemeral: dict[str, datetime] = {}
+        self._last_used_write: dict[UUID, datetime] = {}
 
     async def initialize(self) -> None:
         async with self._session_factory() as session:
@@ -191,6 +192,7 @@ class ApiAccessService:
                 raise NotFoundError("Service token not found")
             await session.delete(row)
             await session.commit()
+        self._last_used_write.pop(token_id, None)
         await self.reload()
 
     async def token_rows(self) -> list[ApiServiceToken]:
@@ -305,20 +307,15 @@ class ApiAccessService:
 
     @staticmethod
     def client_ip(request: Request) -> str | None:
-        candidates = [
-            request.headers.get("cf-connecting-ip"),
-            request.headers.get("x-real-ip"),
-            (request.headers.get("x-forwarded-for") or "").split(",", 1)[0].strip(),
-            request.client.host if request.client else None,
-        ]
-        for candidate in candidates:
-            if not candidate:
-                continue
-            try:
-                return str(ipaddress.ip_address(candidate.strip()))
-            except ValueError:
-                continue
-        return None
+        # TrustedProxyHeadersMiddleware has already normalized request.client using only
+        # forwarding headers from configured proxy networks. Never re-trust raw headers here.
+        candidate = request.client.host if request.client else None
+        if not candidate:
+            return None
+        try:
+            return str(ipaddress.ip_address(candidate.strip()))
+        except ValueError:
+            return None
 
     def blocked_reason(self, request: Request) -> str | None:
         client = self.client_ip(request)
@@ -395,8 +392,11 @@ class ApiAccessService:
         scopes = set(matched.scopes or [])
         if "*" not in scopes and scope not in scopes:
             raise AuthorizationError(f"The service token does not permit the '{scope}' API")
-        async with self._session_factory() as session:
-            row = await session.get(ApiServiceToken, matched.id)
-            if row:
-                row.last_used_at = now
-                await session.commit()
+        last_written = self._last_used_write.get(matched.id)
+        if last_written is None or now - last_written >= timedelta(seconds=60):
+            async with self._session_factory() as session:
+                row = await session.get(ApiServiceToken, matched.id)
+                if row:
+                    row.last_used_at = now
+                    await session.commit()
+                    self._last_used_write[matched.id] = now

@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.3.0 - 2026-07-21
+
+### Production infrastructure
+
+- Added an opt-in Redis operation queue and standalone worker while preserving the in-process default.
+- Added queue de-duplication, distributed operation locks, heartbeat, reconciliation, cancellation
+  checks and restart-safe queued-operation recovery.
+- Added Redis/in-memory catalog caching with shared generation invalidation and fail-open memory
+  degradation.
+- Added Redis/in-memory rate limits for public IPs, service tokens, authenticated-token IP ceilings
+  and administrator sessions.
+- Added trusted-proxy forwarding normalization and disabled unconditional Uvicorn proxy-header trust.
+- Added readiness details for worker, cache and rate-limit infrastructure.
+
+### Governance and security
+
+- Added Keycloak-backed Viewer, Editor, Publisher, Security Admin and Super Admin roles.
+- Preserved legacy `reghub-admin` and legacy signed-cookie Super Admin behavior.
+- Added permission checks for mutations, imports, sync, media, publication, Settings, API security,
+  operation retry/cancel and operation-history administration.
+- Added immutable HMAC hash-chained audit events, nested secret redaction, signing-key IDs and chain
+  verification.
+- Added a Governance dashboard and read-only Audit Trail.
+- Added versioned runtime encryption and audit-signing keyrings with v0.2.x secret compatibility and
+  previous-key rotation support.
+
+### Database and delivery
+
+- Added operation requester roles and audit-chain tables through additive migration `20260721_0006`.
+- Added JSONB GIN and catalog ordering indexes.
+- Added PostgreSQL/Redis CI, Alembic and seed checks, coverage floor, dependency audit and Docker
+  startup smoke testing.
+- Removed no existing API route, response field, database object, template record, runtime setting,
+  Keycloak route or Coolify boundary.
+
 ## 0.2.3.4 - 2026-07-21
 
 ### Import completion experience

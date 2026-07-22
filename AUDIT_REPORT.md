@@ -1,47 +1,60 @@
-# RegHub v0.2.3.4 Import Experience Hotfix — Forensic Audit
+# RegHub v0.3.0 Master Production Audit
 
 ## Baseline integrity
 
-- Baseline: v0.2.3.3 replace-ready source.
-- Existing source files removed: 0.
-- Database migration added: none.
-- Existing public API, Settings, Operations, service-token, Keycloak, template, asset, sync and
-  Coolify behavior is retained.
+- Baseline: live v0.2.3.4 source.
+- Existing baseline files removed: 0.
+- Existing `/api/v1`, OIDC, SQLAdmin, Settings, Operations, template lifecycle, manifests, provider
+  adapters, assets, API service tokens and Coolify boundaries are preserved.
+- Migration `20260721_0006` is additive.
 
-## Findings and corrections
+## Corrected production gaps
 
-### Import result discoverability
+1. **Operation durability:** optional Redis queue/worker added without changing the compatible
+   in-process default.
+2. **Proxy trust:** forwarding headers are interpreted only for configured proxy peers; Uvicorn no
+   longer trusts every forwarding header.
+3. **Abuse control:** public, token, token-IP and administrator quotas are available with Redis/shared
+   or memory fallback.
+4. **Authorization:** granular Keycloak roles and action-level permissions replace all-or-nothing
+   administration while preserving legacy administrator access.
+5. **Accountability:** authentication, Settings, mutations, media and operation outcomes enter a
+   signed immutable audit chain.
+6. **Secret governance:** runtime credentials and audit signatures use versioned independent
+   keyrings with previous-key compatibility.
+7. **Catalog scale:** Redis/memory cache and PostgreSQL catalog/JSONB indexes reduce repeated queries.
+8. **Release governance:** CI now validates PostgreSQL, Redis, migrations, seed, coverage, dependency
+   security and the Docker startup path.
 
-Completed imports previously exposed only raw result JSON and required manual navigation. The live
-operation status now resolves a bounded template summary from the existing template ID and provides
-View Template and source links.
+## Safety posture
 
-### Operation side panel
+- RegHub remains registry-only and never executes imported code.
+- Redis is optional on first rollout.
+- Existing v0.2.x credentials remain decryptable when `SESSION_SECRET` is unchanged.
+- Operation retries enforce the original operation permission; users cannot replay a higher-privilege
+  operation through the Operations Console.
+- Audit rows are read-only in the administrator UI and remain after terminal operation history is
+  cleared.
 
-The operation controls area previously contained only requester timestamps. It now adds a responsive
-result card while retaining cancel, retry, requester and timestamp controls.
+## Verification performed in the build workspace
 
-### Duplicate repository behavior
+- Dependency-independent automated tests: **59 passed**.
+- Python compilation: **PASS**.
+- Jinja template compilation: **PASS** (11 templates).
+- YAML parsing: **PASS** (`compose.local.yml` and production CI).
+- Shell entrypoint syntax: **PASS**.
+- Production-compatible Settings validation: **PASS**.
+- PostgreSQL model DDL compilation: **PASS** (18 tables, 76 indexes).
+- Alembic PostgreSQL offline upgrade through `20260721_0006`: **PASS**.
+- Audit chain hash, key rotation, nested redaction and tail-state detection smoke tests: **PASS**.
+- Redis/memory cache, rate-limit and trusted-proxy governance tests: **PASS**.
+- Python wheel build: **PASS**.
+- Git diff whitespace validation: **PASS**.
 
-The core v0.2.3.3 runner already represented duplicates as `skipped`; this release makes the state
-explicit in the UI as **Already found**, guarantees failure styling is not used, and offers a safe
-continuation workflow instead of creating another template.
-
-### Continue update workflow
-
-The new authenticated, CSRF-protected action validates that the source operation is a skipped
-`already_exists` import, then queues the existing single-template source synchronization workflow.
-It does not bypass feature gates or perform repository code execution.
-
-## Automated verification
-
-- Tests: 96 passed.
-- Application statement coverage: 72%.
-- Ruff lint and formatting: pass.
-- Import operation/card/duplicate continuation regression tests: pass.
-- No database migration required.
-
-## Deployment-time verification
-
-Real provider calls, browser rendering through the production proxy, Keycloak session behavior and
-Coolify rollout remain deployment-time checks.
+The build environment did not provide all locked application/dev dependencies (`sqladmin`, Authlib,
+PyGithub, python-slugify, aiosqlite and Ruff), and its package gateway did not expose them. Therefore,
+the complete dependency-installed pytest and Ruff suites could not be rerun locally. The included
+GitHub CI installs the complete dependency set and blocks promotion unless Ruff, formatting, full
+pytest coverage, PostgreSQL/Redis integration, Alembic, dependency audit and Docker smoke all pass.
+Deployment-time verification remains required for Coolify, Keycloak, real provider credentials and
+the optional Redis worker.

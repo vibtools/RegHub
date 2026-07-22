@@ -8,6 +8,7 @@ from app.core.exceptions import (
     ConflictError,
     FeatureDisabledError,
     NotFoundError,
+    PermissionDeniedError,
     RegistryError,
     ValidationError,
 )
@@ -35,9 +36,15 @@ def registry_error_handler(request: Request, exc: RegistryError) -> JSONResponse
         status_code = 422
     elif isinstance(exc, FeatureDisabledError):
         status_code = 503
+    elif isinstance(exc, PermissionDeniedError):
+        status_code = 403
     elif isinstance(exc, AuthorizationError):
         status_code = 401
-    headers = {"WWW-Authenticate": "Bearer"} if isinstance(exc, AuthorizationError) else None
+    headers = (
+        {"WWW-Authenticate": "Bearer"}
+        if isinstance(exc, AuthorizationError) and not isinstance(exc, PermissionDeniedError)
+        else None
+    )
     return JSONResponse(
         status_code=status_code,
         content=_payload(request, exc.__class__.__name__, str(exc)),

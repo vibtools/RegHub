@@ -4,9 +4,11 @@ from app.admin.application import RegistryAdmin
 from app.admin.authentication import OIDCAdminAuthentication
 from app.admin.views import (
     AssetGalleryView,
+    AuditEventAdmin,
     CategoryAdmin,
     FrameworkAdmin,
     GitHubImportView,
+    GovernanceView,
     ImportHistoryAdmin,
     LocalImportView,
     OperationsConsoleView,
@@ -33,6 +35,7 @@ def setup_admin(app: FastAPI) -> RegistryAdmin:
     )
     for view in [
         OperationsConsoleView,
+        GovernanceView,
         SettingsView,
         GitHubImportView,
         RegistryImportView,
@@ -47,6 +50,7 @@ def setup_admin(app: FastAPI) -> RegistryAdmin:
         TemplateVersionAdmin,
         TemplateAssetAdmin,
         ScreenshotJobAdmin,
+        AuditEventAdmin,
     ]:
         admin.add_view(view)
     return admin

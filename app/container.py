@@ -2,6 +2,9 @@ from app.analyzer.service import TemplateAnalyzer
 from app.core.config import Settings
 from app.core.exceptions import FeatureDisabledError
 from app.database.session import async_session_factory
+from app.governance.audit import AuditService
+from app.infrastructure.cache import CatalogCacheService
+from app.infrastructure.rate_limit import RateLimitService
 from app.integrations.bitbucket.client import BitbucketClient
 from app.integrations.github.client import GitHubClient
 from app.integrations.gitlab.client import GitLabClient
@@ -26,8 +29,25 @@ class ApplicationContainer:
         self.api_access = ApiAccessService(
             async_session_factory, settings.session_secret.get_secret_value()
         )
+        self.audit = AuditService(async_session_factory, settings.audit_keyring)
+        self.catalog_cache = CatalogCacheService(
+            backend=settings.cache_backend,
+            redis_url=settings.redis_dsn,
+            ttl_seconds=settings.catalog_cache_ttl_seconds,
+        )
+        self.rate_limiter = RateLimitService(
+            backend=settings.rate_limit_backend,
+            redis_url=settings.redis_dsn,
+        )
         self.operation_service = OperationService(async_session_factory)
-        self.operation_runner = OperationRunner(self.operation_service)
+        self.operation_runner = OperationRunner(
+            self.operation_service,
+            backend=settings.operation_backend,
+            redis_url=settings.redis_dsn,
+            queue_name=settings.operation_queue_name,
+            lock_ttl_seconds=settings.operation_lock_ttl_seconds,
+            poll_seconds=settings.operation_worker_poll_seconds,
+        )
         self.operation_runner.bind(self)
 
         self.github_authenticated = False
@@ -47,11 +67,13 @@ class ApplicationContainer:
         self._async_clients: list[object] = []
         self._retired_clients: list[object] = []
 
-    async def initialize(self) -> None:
+    async def initialize(self, *, worker_process: bool = False) -> None:
         await self.runtime_settings.initialize()
         await self.api_access.initialize()
+        await self.catalog_cache.initialize()
+        await self.rate_limiter.initialize()
         await self.reload_runtime()
-        await self.operation_runner.initialize()
+        await self.operation_runner.initialize(worker_process=worker_process)
 
     def feature_enabled(self, key: str, *, task: bool = False) -> bool:
         return self.runtime_settings.feature_enabled(key, task=task)
@@ -68,7 +90,7 @@ class ApplicationContainer:
             return default
         return max(minimum, min(parsed, maximum))
 
-    async def reload_runtime(self) -> None:
+    async def reload_runtime(self, *, preserve_inflight: bool = True) -> None:
         await self.runtime_settings.reload()
         previous_clients = self._async_clients
 
@@ -160,13 +182,25 @@ class ApplicationContainer:
         self.local_upload_enabled = self.feature_enabled("local_import", task=True)
         self.adapter_names = adapter_registry.names
         self._async_clients = [gitlab_client, bitbucket_client]
+        await self.catalog_cache.invalidate_all()
 
-        # Keep replaced clients alive until shutdown so an operation already in flight is not
-        # interrupted by an administrator changing runtime settings.
-        self._retired_clients.extend(previous_clients)
+        if preserve_inflight:
+            # The web process may be serving an operation while an administrator changes Settings.
+            # Keep replaced clients alive until shutdown so that in-flight work is not interrupted.
+            self._retired_clients.extend(previous_clients)
+        else:
+            # A standalone worker reloads Settings only at an operation boundary, where no previous
+            # provider client is still in use. Close superseded async clients immediately to avoid
+            # an unbounded retired-client list during long-lived worker operation.
+            for client in previous_clients:
+                close = getattr(client, "close", None)
+                if close is not None:
+                    await close()
 
     async def close(self) -> None:
         await self.operation_runner.shutdown()
+        await self.catalog_cache.close()
+        await self.rate_limiter.close()
         for client in [*self._async_clients, *self._retired_clients]:
             close = getattr(client, "close", None)
             if close is not None:

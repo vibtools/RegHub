@@ -13,7 +13,13 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 class Template(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "templates"
-    __table_args__ = (Index("ix_templates_public_catalog", "status", "is_featured", "created_at"),)
+    __table_args__ = (
+        Index("ix_templates_public_catalog", "status", "is_featured", "created_at"),
+        Index("ix_templates_catalog_updated", "status", "updated_at", "id"),
+        Index("ix_templates_catalog_quality", "status", "quality_score", "id"),
+        Index("ix_templates_catalog_stars", "status", "stars_count", "id"),
+        Index("ix_templates_topics_gin", "topics", postgresql_using="gin"),
+    )
 
     name: Mapped[str] = mapped_column(String(160), index=True)
     slug: Mapped[str] = mapped_column(String(180), unique=True, index=True)

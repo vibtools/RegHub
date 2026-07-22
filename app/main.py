@@ -17,6 +17,8 @@ from app.core.exceptions import RegistryError
 from app.core.logging import configure_logging
 from app.core.middleware import RequestIdMiddleware, SecurityHeadersMiddleware
 from app.database.engine import engine
+from app.infrastructure.middleware import RateLimitMiddleware
+from app.infrastructure.proxy import TrustedProxyHeadersMiddleware
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -32,7 +34,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RegHub API",
-    version="0.2.3.4",
+    version="0.3.0",
     description="Smart template registry API for YGIT",
     debug=settings.app_debug,
     lifespan=lifespan,
@@ -60,7 +62,16 @@ app.add_middleware(
     allow_headers=["Accept", "Content-Type", "X-Request-ID", "Authorization", "X-RegHub-Token"],
 )
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    RateLimitMiddleware,
+    service=app.state.container.rate_limiter,
+    settings=settings,
+)
 app.add_middleware(RequestIdMiddleware)
+app.add_middleware(
+    TrustedProxyHeadersMiddleware,
+    trusted_networks=settings.trusted_proxy_networks,
+)
 
 app.add_exception_handler(RegistryError, registry_error_handler)
 app.add_exception_handler(Exception, unexpected_error_handler)

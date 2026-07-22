@@ -5,6 +5,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.enums import ImportStatus, TemplateStatus
+from app.governance.rbac import require_permission
 from app.models.category import Category
 from app.models.framework import Framework
 from app.models.import_history import ImportHistory
@@ -15,6 +16,7 @@ from app.models.template import Template
 class RegistryAdmin(Admin):
     @login_required
     async def index(self, request: Request) -> Response:
+        require_permission(request, "registry.read")
         async with self.session_maker() as session:
             context = {
                 "title": "Registry Dashboard",

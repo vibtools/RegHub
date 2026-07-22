@@ -10,6 +10,8 @@ from app.core.config import get_settings
 from app.database.base import Base
 from app.models import (  # noqa: F401
     AdminOperation,
+    AuditChainState,
+    AuditEvent,
     ApiAccessPolicy,
     ApiBlockRule,
     ApiServiceToken,

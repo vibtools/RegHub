@@ -60,3 +60,13 @@ X-RegHub-Token: vt_reg_xxxxx
 Missing, invalid, disabled, or expired credentials return structured HTTP 401 responses with a
 request ID and `WWW-Authenticate: Bearer`. Tokens that do not include the endpoint scope are denied.
 The CORS policy permits the two authentication headers for configured YGIT origins.
+
+## v0.3.0 production infrastructure
+
+Existing `/api/v1` paths and response fields remain unchanged. Additive capability fields report the
+operation, cache and rate-limit backends and whether RBAC/immutable audit are active.
+
+Successful limited requests include `RateLimit-*` and legacy-compatible `X-RateLimit-*` headers.
+Excess requests return structured HTTP 429 with request ID and `Retry-After`. Cached catalog
+responses may include `X-RegHub-Cache: HIT|MISS|STALE`; cached response metadata always receives the
+current request ID.
