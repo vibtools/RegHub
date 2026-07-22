@@ -29,14 +29,13 @@ def test_rbac_preserves_legacy_admin_and_maps_granular_roles():
     assert not has_permission(identity, "settings.manage")
 
 
-def test_old_admin_cookie_defaults_to_super_admin():
+def test_old_admin_cookie_never_defaults_to_super_admin():
     signer = AdminTokenSigner("x" * 40)
     token = signer._serializer.dumps(
         {"subject": "legacy", "email": None, "name": None, "claims": {}}
     )
     identity = signer.verify(token, 60)
-    assert identity is not None
-    assert identity.roles == ("super_admin",)
+    assert identity is None
 
 
 def test_secret_cipher_reads_v1_and_writes_versioned_v2():

@@ -2,7 +2,16 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import OperationStatus
@@ -13,6 +22,12 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 class AdminOperation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "admin_operations"
+    __table_args__ = (
+        CheckConstraint(
+            "progress >= 0 AND progress <= 100",
+            name="ck_admin_operations_progress_range",
+        ),
+    )
 
     operation_type: Mapped[str] = mapped_column(String(80), index=True)
     title: Mapped[str] = mapped_column(String(240))

@@ -1,6 +1,6 @@
 # RegHub
 
-Current release: **v0.3.0.3 CI Compatibility and Resilience Hotfix**
+Current release: **v0.3.1.0 Architecture Stabilization Release**
 
 RegHub is the registry service for the YGIT ecosystem. It imports and analyzes template metadata,
 manages publication, and serves a stable read-only API to `ygit.net`. RegHub does **not** build or
@@ -13,6 +13,28 @@ deploy user projects.
 - Deployment: `ygit.net`
 - Repository sources: GitHub, GitLab, Bitbucket, local manifest/ZIP
 - Hosting: Coolify
+
+## v0.3.1.0 architecture stabilization
+
+This is a stabilization release. It adds no public endpoint, integration, provider, administrator
+page, setting, service, deployment capability, or workflow. The existing replace-files, Git push,
+and Coolify deployment process is unchanged.
+
+- Rejects legacy or malformed administrator cookies that do not contain verified roles.
+- Separates OIDC state, administrator-authentication, and SQLAdmin auxiliary-session signing material
+  through deterministic purpose-bound key derivation without requiring a new environment variable.
+- Clears all local authentication cookies during logout and uses the existing OIDC end-session URL
+  when configured.
+- Guarantees that private GitHub, GitLab, and Bitbucket repository content is never sent to the
+  optional AI metadata integration.
+- Keeps repository analysis focused on framework, language, package manager, license, topics, README,
+  repository metadata, preview media, quality, and security signals.
+- Stops generating build, start, runtime, environment, deployment-type, or deployment-readiness
+  recommendations. Existing manifest v1/v2 schemas remain readable for API compatibility.
+- Adds migration `20260722_0007_architecture_stabilization` for safe data normalization, exact asset
+  deduplication, model constraints, redundant-index cleanup, and generated-intelligence cleanup.
+- Removes historical generated verification/inventory reports from the tracked source package while
+  retaining release manifests and documentation.
 
 ## v0.3.0.1 governance and worker-control hotfix
 
@@ -160,7 +182,5 @@ GET /api/v1/ready
 5. The entrypoint runs `alembic upgrade head` and `python -m scripts.seed` automatically.
 6. Verify health, readiness, tag filtering, Operations, and Settings.
 
-See `docs/31_V0.3.0_PRODUCTION_INFRASTRUCTURE_GOVERNANCE.md`,
-`docs/32_V0.3.0_UPGRADE.md`, `docs/33_V0.3.0_RBAC_AUDIT.md`,
-`docs/37_V0.3.0.3_CI_COMPATIBILITY_RESILIENCE_HOTFIX.md` and
-`docs/38_V0.3.0.3_UPGRADE.md`.
+See `docs/39_V0.3.1.0_ARCHITECTURE_STABILIZATION.md`,
+`docs/40_V0.3.1.0_UPGRADE.md`, and `docs/41_V0.3.1.0_AUDIT_SUMMARY.md`.

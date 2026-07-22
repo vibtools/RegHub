@@ -1,19 +1,23 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
+from starlette.datastructures import URL
+from starlette.responses import Response
 
 from app.core.config import Settings, get_settings
 from app.core.security import (
     AdminIdentity,
     AdminTokenSigner,
-    claim_matches,
-    get_nested_claim,
     sanitize_relative_redirect,
 )
 from app.governance.rbac import resolve_roles
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+_AUTH_COOKIES = ("reghub_auth", "reghub_admin_aux", "reghub_oidc_state")
 
 
 def _signer() -> AdminTokenSigner:
@@ -32,6 +36,22 @@ def _identity_from_claims(claims: dict[str, Any], settings: Settings) -> AdminId
         claims={},
         roles=resolve_roles(claims, settings),
     )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    for cookie in _AUTH_COOKIES:
+        response.delete_cookie(cookie, path="/")
+    response.headers["Cache-Control"] = "no-store"
+
+
+def _logout_target(settings: Settings) -> str:
+    if not settings.oidc_end_session_url:
+        return "/"
+    target = URL(str(settings.oidc_end_session_url)).include_query_params(
+        post_logout_redirect_uri=f"{settings.base_url}/",
+        client_id=settings.oidc_client_id or "",
+    )
+    return str(target)
 
 
 @router.get("/login", name="auth_login")
@@ -62,10 +82,8 @@ async def callback(request: Request):
     if not isinstance(claims, dict):
         claims = await client.userinfo(token=token)
         claims = dict(claims)
-    claim_value = get_nested_claim(claims, settings.oidc_admin_claim)
     identity = _identity_from_claims(claims, settings)
-    legacy_authorized = claim_matches(claim_value, settings.oidc_admin_values)
-    if not legacy_authorized and not identity.roles:
+    if not identity.roles:
         await request.app.state.container.audit.append(
             action="auth.login",
             resource_type="administrator_session",
@@ -95,6 +113,7 @@ async def callback(request: Request):
         samesite="lax",
         path="/",
     )
+    response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -104,15 +123,20 @@ async def logout(request: Request):
     token = request.cookies.get("reghub_auth")
     identity = _signer().verify(token, settings.session_max_age_seconds) if token else None
     if identity is not None:
-        await request.app.state.container.audit.append(
-            action="auth.logout",
-            resource_type="administrator_session",
-            resource_id=identity.subject,
-            identity=identity,
-            request=request,
-        )
-    response = RedirectResponse("/", status_code=status.HTTP_302_FOUND)
-    response.delete_cookie("reghub_auth", path="/")
+        try:
+            await request.app.state.container.audit.append(
+                action="auth.logout",
+                resource_type="administrator_session",
+                resource_id=identity.subject,
+                identity=identity,
+                request=request,
+            )
+        except Exception:
+            # Logout must still revoke local browser state when the audit database is unavailable.
+            logger.exception("Unable to record administrator logout audit event")
+    request.session.clear()
+    response = RedirectResponse(_logout_target(settings), status_code=status.HTTP_302_FOUND)
+    _clear_auth_cookies(response)
     return response
 
 
@@ -121,7 +145,7 @@ async def me(request: Request):
     settings = get_settings()
     token = request.cookies.get("reghub_auth")
     identity = _signer().verify(token, settings.session_max_age_seconds) if token else None
-    if identity is None:
+    if identity is None or not identity.roles:
         return JSONResponse({"authenticated": False}, status_code=401)
     return {
         "authenticated": True,

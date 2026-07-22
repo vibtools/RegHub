@@ -1,5 +1,46 @@
 # Changelog
 
+## v0.3.1.0 — Architecture Stabilization Release
+
+### Security
+
+- Rejected roleless legacy/malformed administrator cookies instead of inferring Super Admin access.
+- Added purpose-bound cryptographic key derivation for OIDC state, administrator authentication, and
+  the SQLAdmin auxiliary session without adding deployment configuration.
+- Completed local logout by clearing all RegHub authentication cookies and delegating to the existing
+  OIDC end-session endpoint when configured.
+- Prevented private GitHub, GitLab, and Bitbucket repository content from reaching optional AI
+  metadata enrichment.
+
+### Registry architecture
+
+- Retained framework, language, package-manager, license, topic, README, repository, media, quality,
+  and security analysis inside RegHub.
+- Removed generated build/start/runtime/environment/deployment recommendations and the
+  deployment-readiness quality dimension.
+- Kept Manifest v1/v2 schemas and all `/api/v1` paths compatible; generated manifests are now
+  deployment-neutral because YGIT owns deployment decisions.
+
+### Database and repository integrity
+
+- Added migration `20260722_0007_architecture_stabilization`.
+- Aligned `templates.external_repository_id` with the existing 160-character model contract.
+- Normalized invalid numeric values, removed exact duplicate asset rows, and added bounded checks and
+  an exact asset identity constraint.
+- Removed redundant unique indexes where an equivalent unique constraint already exists.
+- Cleaned obsolete generated deployment intelligence from current analysis, version snapshots, import
+  snapshots, and stored manifests.
+- Removed historical generated compatibility, inventory, and verification reports from the source
+  tree while preserving release manifests and substantive documentation.
+
+### Compatibility
+
+- Added no feature, endpoint, integration, provider, admin page, setting, service, or deployment step.
+- Kept the current Dockerfile, GitHub Actions workflow, Coolify process, Keycloak roles, Settings,
+  Operations, Governance, API access, and template lifecycle unchanged.
+- Existing administrators are required to authenticate once after deployment because legacy cookies
+  are intentionally invalidated.
+
 ## v0.3.0.3 — CI Compatibility and Resilience Hotfix
 
 - Updated historical admin tests to use the production `AdminIdentity` RBAC contract without weakening runtime authorization.

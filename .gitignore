@@ -14,3 +14,8 @@ venv/
 .vscode/
 build/
 dist/
+
+# Generated release evidence belongs in release bundles, not the source tree.
+BASELINE_COMPATIBILITY_V*.txt
+FILE_INVENTORY_V*.txt
+RELEASE_VERIFICATION_V*.txt

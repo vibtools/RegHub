@@ -51,35 +51,3 @@ def detect_package_manager(root_files: frozenset[str]) -> str | None:
     if "composer.lock" in files or "composer.json" in files:
         return "composer"
     return None
-
-
-def detect_commands(
-    package_json: dict[str, Any] | None,
-    package_manager: str | None,
-    framework_slug: str,
-) -> tuple[str | None, str | None]:
-    scripts = package_json.get("scripts", {}) if isinstance(package_json, dict) else {}
-    if not isinstance(scripts, dict):
-        scripts = {}
-    prefix = package_manager or "npm"
-    runner = {
-        "npm": "npm run",
-        "pnpm": "pnpm",
-        "yarn": "yarn",
-        "bun": "bun run",
-    }.get(prefix, "npm run")
-
-    build = f"{runner} build" if "build" in scripts else None
-    start = None
-    for candidate in ("start", "preview", "dev"):
-        if candidate in scripts:
-            start = f"{runner} {candidate}"
-            break
-
-    if framework_slug == "fastapi" and not start:
-        start = "uvicorn app.main:app --host 0.0.0.0 --port 8000"
-    elif framework_slug == "django" and not start:
-        start = "python manage.py runserver 0.0.0.0:8000"
-    elif framework_slug == "laravel" and not start:
-        start = "php artisan serve --host=0.0.0.0 --port=8000"
-    return build, start

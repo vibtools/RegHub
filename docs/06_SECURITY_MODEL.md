@@ -17,3 +17,14 @@ restricted CORS and structured request IDs remain mandatory.
 Production should use independent `SESSION_SECRET`, `RUNTIME_ENCRYPTION_KEY` and `AUDIT_SIGNING_KEY`
 values, private PostgreSQL/Redis networks and reverse-proxy edge limits in addition to application
 limits.
+
+
+## v0.3.1.0 stabilization controls
+
+- Legacy/versionless administrator cookies without verified roles are rejected.
+- Browser security boundaries use purpose-separated derived keys.
+- Logout clears all RegHub authentication/session cookies and sends a fixed public-base return URL to
+  the existing OIDC end-session endpoint.
+- Provider adapters preserve private-repository classification. AI enrichment checks the classification
+  before orchestration and again before creating an HTTP client, so private content cannot be sent.
+- Repository analysis no longer produces deployment decisions; YGIT remains the deployment owner.

@@ -46,8 +46,13 @@ def test_auto_metadata_and_quality_score() -> None:
     assert result.difficulty in {"intermediate", "advanced"}
     assert "dashboard" in result.tags
     assert result.quality_score >= 70
-    assert result.environment[0]["key"] == "DATABASE_URL"
-    assert result.environment[1]["secret"] is True
+    assert "deployment_readiness" not in result.quality_breakdown
+    assert "metadata" in result.quality_breakdown
+    assert "repository_structure" in result.quality_breakdown
+    assert "build_command" not in result.to_json()
+    assert "start_command" not in result.to_json()
+    assert "deploy_type" not in result.to_json()
+    assert "environment" not in result.to_json()
 
 
 def test_quality_score_drops_without_docs_or_license() -> None:

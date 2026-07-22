@@ -61,3 +61,18 @@
 - Existing v0.2.x runtime secrets decrypt after upgrade.
 - Alembic upgrades a v0.2.3.4 database without destructive DDL.
 - GitHub CI PostgreSQL/Redis, dependency audit and Docker smoke gates pass.
+
+
+## v0.3.1.0 architecture stabilization checks
+
+- No public route, Settings control, admin page, provider, integration, service or workflow is added.
+- Legacy/versionless roleless administrator cookies are rejected; current OIDC login issues v2 cookies.
+- OIDC state, administrator cookie and SQLAdmin auxiliary session use distinct derived keys.
+- Logout expires all local authentication cookies and cannot accept an untrusted return target.
+- Private repositories never instantiate or call the AI metadata HTTP transport.
+- Analysis retains registry metadata and contains no generated deployment recommendation fields.
+- Generated manifests are deployment-neutral while v1/v2 parsing remains compatible.
+- Migration upgrades the current schema, preserves IDs/status/history, cleans exact duplicate assets,
+  aligns constraints and removes only redundant indexes/generated intelligence.
+- Historical generated report noise, caches, build and distribution directories are absent.
+- Existing GitHub Actions, Docker, entrypoint, seed and Coolify deployment behavior are unchanged.

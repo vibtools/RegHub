@@ -8,7 +8,7 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 class FeatureFlag(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "feature_flags"
 
-    key: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    key: Mapped[str] = mapped_column(String(120), unique=True)
     name: Mapped[str] = mapped_column(String(160))
     category: Mapped[str] = mapped_column(String(80), index=True)
     description: Mapped[str | None] = mapped_column(Text)

@@ -12,9 +12,6 @@ def analysis() -> AnalysisResult:
         framework_version="5.2.1",
         language="TypeScript",
         package_manager="pnpm",
-        build_command="pnpm build",
-        start_command="pnpm preview",
-        deploy_type="static",
         title="Astro Starter",
         short_description="Starter",
         description="Starter",
@@ -22,7 +19,6 @@ def analysis() -> AnalysisResult:
         category_slug="general",
         difficulty="beginner",
         use_case="General web application starter",
-        environment=[{"key": "PUBLIC_API_URL", "required": False, "secret": False}],
     )
 
 
@@ -38,8 +34,9 @@ def test_builds_manifest_v2() -> None:
     assert manifest.schema_version == "2.0"
     assert manifest.name == "Astro Starter"
     assert manifest.framework_version == "5.2.1"
-    assert manifest.build.command == "pnpm build"
-    assert manifest.environment[0].key == "PUBLIC_API_URL"
+    assert manifest.build is None
+    assert manifest.deploy.type.value == "unknown"
+    assert manifest.environment == []
 
 
 def test_v1_remains_valid() -> None:

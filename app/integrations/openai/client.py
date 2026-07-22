@@ -32,10 +32,19 @@ class AIMetadataEnricher:
     def enabled(self) -> bool:
         return self._enabled
 
+    def can_enrich(self, repository: ImportedRepository) -> bool:
+        return self._enabled and not repository.is_private
+
     async def enrich(
         self, repository: ImportedRepository, analysis: AnalysisResult
     ) -> AnalysisResult:
         if not self._enabled:
+            return analysis
+        if repository.is_private:
+            logger.warning(
+                "AI metadata enrichment skipped for a private %s repository",
+                repository.adapter,
+            )
             return analysis
         payload = {
             "model": self._model,

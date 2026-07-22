@@ -188,8 +188,6 @@ class TemplateImportService:
                             "framework_version": analysis.framework_version,
                             "language": analysis.language,
                             "package_manager": analysis.package_manager,
-                            "build_command": analysis.build_command,
-                            "start_command": analysis.start_command,
                             "quality_score": analysis.quality_score,
                             "difficulty": analysis.difficulty,
                             "use_case": analysis.use_case,
@@ -202,10 +200,17 @@ class TemplateImportService:
                 ),
                 "debug",
             )
-            if self._ai_enricher and self._ai_enricher.enabled:
+            if self._ai_enricher and self._ai_enricher.can_enrich(imported):
                 await self._progress(progress, 56, "Running optional AI metadata enrichment")
                 analysis = await self._ai_enricher.enrich(imported, analysis)
                 await self._progress(progress, 60, "AI metadata enrichment completed")
+            elif self._ai_enricher and self._ai_enricher.enabled and imported.is_private:
+                await self._progress(
+                    progress,
+                    60,
+                    "AI metadata enrichment skipped: private repository content is never sent",
+                    "notice",
+                )
             else:
                 await self._progress(
                     progress,
@@ -689,9 +694,6 @@ class TemplateSyncService:
                     {
                         "framework_evidence": analysis.evidence.get("framework_evidence", []),
                         "root_files": analysis.evidence.get("root_files", []),
-                        "build_command": analysis.build_command,
-                        "start_command": analysis.start_command,
-                        "deploy_type": analysis.deploy_type,
                         "security_signals": analysis.security_signals,
                         "tags": analysis.tags[:40],
                         "screenshots": analysis.screenshots[:20],
@@ -701,9 +703,16 @@ class TemplateSyncService:
                 ),
                 "debug",
             )
-            if self._ai_enricher and self._ai_enricher.enabled:
+            if self._ai_enricher and self._ai_enricher.can_enrich(imported):
                 await self._progress(progress, 52, "Running optional AI metadata enrichment")
                 analysis = await self._ai_enricher.enrich(imported, analysis)
+            elif self._ai_enricher and self._ai_enricher.enabled and imported.is_private:
+                await self._progress(
+                    progress,
+                    52,
+                    "AI metadata enrichment skipped: private repository content is never sent",
+                    "notice",
+                )
             await self._progress(
                 progress, 58, "Applying source updates while preserving curated fields"
             )

@@ -75,3 +75,20 @@ column, index, or record is removed or renamed.
 - `audit_events` is an append-only, HMAC-signed chain with actor, roles, action, resource, request,
   client, redacted details, signing-key ID and previous/event hashes.
 - Catalog ordering indexes and a PostgreSQL GIN index on `templates.topics` support larger catalogs.
+
+
+## v0.3.1.0 integrity stabilization
+
+Migration `20260722_0007_architecture_stabilization` is additive/non-breaking at the schema level:
+
+- widens `templates.external_repository_id` from 120 to 160 characters to match the model;
+- clamps invalid operation progress, quality, star/fork, screenshot-attempt and asset-order values;
+- removes exact duplicate template assets while preserving the oldest row;
+- adds bounded numeric, API-mode, block-rule, audit-chain and asset-identity constraints;
+- removes redundant unique indexes that duplicate existing unique constraints;
+- removes obsolete generated deployment intelligence from analysis, version/import snapshots and
+  stored generated manifests; and
+- recalculates quality breakdowns using registry-only metadata and repository-structure dimensions.
+
+No table or column is removed or renamed. Existing template IDs, slugs, publication states, audit
+events, operation history, tokens, integration credentials and relationships are preserved.

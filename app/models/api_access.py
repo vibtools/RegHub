@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -11,8 +11,14 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 class ApiAccessPolicy(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "api_access_policies"
+    __table_args__ = (
+        CheckConstraint(
+            "mode IN ('development', 'live')",
+            name="ck_api_access_policies_mode",
+        ),
+    )
 
-    key: Mapped[str] = mapped_column(String(80), unique=True, index=True, default="default")
+    key: Mapped[str] = mapped_column(String(80), unique=True, default="default")
     mode: Mapped[str] = mapped_column(String(24), default="development", index=True)
     updated_by: Mapped[str | None] = mapped_column(String(255))
 
@@ -22,7 +28,7 @@ class ApiServiceToken(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     name: Mapped[str] = mapped_column(String(160), index=True)
     token_prefix: Mapped[str] = mapped_column(String(32), index=True)
-    token_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), unique=True)
     last_four: Mapped[str] = mapped_column(String(8))
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     scopes: Mapped[list[str]] = mapped_column(JSON_VARIANT, default=list)
@@ -38,8 +44,14 @@ class ApiServiceToken(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class ApiBlockRule(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "api_block_rules"
+    __table_args__ = (
+        CheckConstraint(
+            "rule_type IN ('ip', 'cidr', 'hostname')",
+            name="ck_api_block_rules_rule_type",
+        ),
+    )
 
-    value: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    value: Mapped[str] = mapped_column(String(255), unique=True)
     rule_type: Mapped[str] = mapped_column(String(24), index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     note: Mapped[str | None] = mapped_column(String(500))

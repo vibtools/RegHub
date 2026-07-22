@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import CheckConstraint, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import ScreenshotJobStatus
@@ -13,6 +13,12 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 class ScreenshotJob(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "screenshot_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "attempts >= 0",
+            name="ck_screenshot_jobs_attempts_nonnegative",
+        ),
+    )
 
     template_id: Mapped[UUID] = mapped_column(
         ForeignKey("templates.id", ondelete="CASCADE"), index=True

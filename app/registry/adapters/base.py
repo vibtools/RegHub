@@ -21,6 +21,7 @@ class ImportedRepository:
     root_files: frozenset[str]
     package_json: dict[str, Any] | None
     metadata: dict[str, Any]
+    is_private: bool = False
     source_revision: str | None = None
     source_updated_at: datetime | None = None
     readme_text: str | None = None

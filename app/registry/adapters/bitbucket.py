@@ -51,6 +51,7 @@ class BitbucketRegistryAdapter(RegistryAdapter):
             root_files=data.root_files,
             package_json=data.package_json,
             metadata=data.raw,
+            is_private=data.private,
             source_revision=data.source_revision,
             source_updated_at=data.source_updated_at,
             readme_text=data.files.get("readme"),

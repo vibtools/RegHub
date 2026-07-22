@@ -11,7 +11,7 @@ def test_builds_minimal_manifest() -> None:
         repository_url="https://github.com/ygit/starter",
         default_branch="main",
     )
-    assert manifest.deploy.type == DeployType.STATIC
+    assert manifest.deploy.type == DeployType.UNKNOWN
     assert manifest.schema_version == "1.0"
 
 

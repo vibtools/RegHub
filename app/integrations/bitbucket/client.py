@@ -31,6 +31,7 @@ class BitbucketRepositoryData:
     language: str | None
     stars_count: int
     forks_count: int
+    private: bool
     root_files: frozenset[str]
     package_json: dict[str, Any] | None
     source_revision: str | None
@@ -219,6 +220,7 @@ class BitbucketClient:
             language=data.get("language") or None,
             stars_count=0,
             forks_count=int(data.get("forks", {}).get("size") or 0),
+            private=bool(data.get("is_private")),
             root_files=root_files,
             package_json=package_json,
             source_revision=data.get("updated_on"),
@@ -236,6 +238,7 @@ class BitbucketClient:
                 "owner_type": owner_type,
                 "owner_url": owner_url,
                 "bitbucket_authenticated": self.is_authenticated,
+                "private": bool(data.get("is_private")),
                 "screenshot_count": len(screenshots),
             },
         )

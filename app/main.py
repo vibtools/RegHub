@@ -16,6 +16,7 @@ from app.core.config import get_settings
 from app.core.exceptions import RegistryError
 from app.core.logging import configure_logging
 from app.core.middleware import RequestIdMiddleware, SecurityHeadersMiddleware
+from app.core.security import derive_secret
 from app.database.engine import engine
 from app.infrastructure.middleware import RateLimitMiddleware
 from app.infrastructure.proxy import TrustedProxyHeadersMiddleware
@@ -34,7 +35,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="RegHub API",
-    version="0.3.0.3",
+    version="0.3.1.0",
     description="Smart template registry API for YGIT",
     debug=settings.app_debug,
     lifespan=lifespan,
@@ -48,7 +49,9 @@ app.state.container = ApplicationContainer(settings)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.allowed_hosts)
 app.add_middleware(
     SessionMiddleware,
-    secret_key=settings.session_secret.get_secret_value(),
+    secret_key=derive_secret(
+        settings.session_secret.get_secret_value(), "oidc-state-session"
+    ),
     session_cookie="reghub_oidc_state",
     max_age=600,
     same_site="lax",

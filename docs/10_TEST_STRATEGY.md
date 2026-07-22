@@ -18,3 +18,11 @@ the test suite with a 70% application coverage floor.
 CI also runs Ruff, Python compilation, dependency vulnerability audit, Docker image build, container
 startup and health verification. Live deployment verification still covers Keycloak, provider
 credentials, Coolify proxy networks, worker heartbeat, backups and rollback.
+
+
+## v0.3.1.0 stabilization regressions
+
+The release adds regression coverage for roleless legacy-cookie rejection, purpose-key separation,
+redirect hardening, complete cookie clearing, fixed OIDC logout targeting, private-repository AI
+blocking, deployment-neutral generated manifests, model constraints, and migration safety. Existing
+CI gates and retry behavior are unchanged.

@@ -70,3 +70,11 @@ Successful limited requests include `RateLimit-*` and legacy-compatible `X-RateL
 Excess requests return structured HTTP 429 with request ID and `Retry-After`. Cached catalog
 responses may include `X-RegHub-Cache: HIT|MISS|STALE`; cached response metadata always receives the
 current request ID.
+
+## v0.3.1.0 stabilization
+
+No endpoint or response model is added or removed. Published-template visibility, authentication,
+pagination, caching, ETag, and service-token behavior are unchanged. The free-form registry
+`analysis` object no longer contains RegHub-generated build, start, runtime, environment, deployment
+type, or deployment-readiness recommendations. Manifest v1/v2 schema parsing remains compatible;
+RegHub-generated manifests now use an unknown deployment type and contain no generated build data.

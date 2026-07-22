@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Integer, String
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
@@ -11,6 +11,13 @@ from app.models.mixins import UUIDPrimaryKeyMixin
 
 class AuditChainState(Base):
     __tablename__ = "audit_chain_states"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_audit_chain_state_singleton"),
+        CheckConstraint(
+            "last_sequence >= 0",
+            name="ck_audit_chain_state_sequence_nonnegative",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     last_sequence: Mapped[int] = mapped_column(BigInteger, default=0)
@@ -20,8 +27,11 @@ class AuditChainState(Base):
 
 class AuditEvent(UUIDPrimaryKeyMixin, Base):
     __tablename__ = "audit_events"
+    __table_args__ = (
+        CheckConstraint("sequence > 0", name="ck_audit_events_sequence_positive"),
+    )
 
-    sequence: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    sequence: Mapped[int] = mapped_column(BigInteger, unique=True)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     actor_subject: Mapped[str | None] = mapped_column(String(255), index=True)
     actor_email: Mapped[str | None] = mapped_column(String(320))
@@ -35,7 +45,7 @@ class AuditEvent(UUIDPrimaryKeyMixin, Base):
     details: Mapped[dict[str, Any]] = mapped_column(JSON_VARIANT, default=dict)
     signing_key_id: Mapped[str] = mapped_column(String(12), index=True)
     previous_hash: Mapped[str] = mapped_column(String(128))
-    event_hash: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    event_hash: Mapped[str] = mapped_column(String(128), unique=True)
 
     def __str__(self) -> str:
         return f"#{self.sequence} {self.action}"

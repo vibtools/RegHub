@@ -9,9 +9,6 @@ class AnalysisResult:
     framework_version: str | None
     language: str | None
     package_manager: str | None
-    build_command: str | None
-    start_command: str | None
-    deploy_type: str
     title: str
     short_description: str | None
     description: str | None
@@ -19,7 +16,6 @@ class AnalysisResult:
     category_slug: str
     difficulty: str
     use_case: str
-    environment: list[dict[str, Any]] = field(default_factory=list)
     screenshots: list[str] = field(default_factory=list)
     quality_score: int = 0
     quality_breakdown: dict[str, int] = field(default_factory=dict)
@@ -33,9 +29,6 @@ class AnalysisResult:
             "framework_version": self.framework_version,
             "language": self.language,
             "package_manager": self.package_manager,
-            "build_command": self.build_command,
-            "start_command": self.start_command,
-            "deploy_type": self.deploy_type,
             "title": self.title,
             "short_description": self.short_description,
             "description": self.description,
@@ -43,7 +36,6 @@ class AnalysisResult:
             "category": self.category_slug,
             "difficulty": self.difficulty,
             "use_case": self.use_case,
-            "environment": self.environment,
             "screenshots": self.screenshots,
             "quality_score": self.quality_score,
             "quality_breakdown": self.quality_breakdown,

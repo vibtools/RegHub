@@ -1,3 +1,18 @@
+# RegHub v0.3.1.0 Architecture Stabilization Audit
+
+- Baseline: v0.3.0.3 replace-ready source plus the current main-branch Ruff-only formatting commit.
+- Classification: Architecture Stabilization Release; no feature work.
+- Public endpoints added/removed: none.
+- Integrations, providers, admin pages, Settings, services, deployment and CI workflow changes: none.
+- Security: roleless legacy cookies rejected; purpose-bound key separation; complete local/OIDC logout;
+  private repository AI processing blocked at both orchestration and transport boundaries.
+- Registry boundary: framework/language/package/license/topic/README/repository analysis retained;
+  generated build/start/runtime/environment/deployment intelligence removed.
+- Database: additive migration `20260722_0007`; no table or column removed; exact duplicate assets
+  cleaned; constraints/model lengths aligned; redundant indexes removed.
+- Repository: build/cache/generated historical report noise removed from the release source.
+- Existing replace, Git push, and Coolify deployment workflow preserved.
+
 # RegHub v0.3.0.1 Hotfix Audit
 
 - Baseline: v0.3.0 replace-ready source.

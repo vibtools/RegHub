@@ -384,7 +384,7 @@ async def capabilities(request: Request, response: Response):
         return cached
     _cache(response)
     result = CapabilitiesRead(
-        version="0.3.0.3",
+        version="0.3.1.0",
         registry_adapters=[*container.adapter_names, "local-manifest", "local-zip"],
         framework_detection=[
             "astro",

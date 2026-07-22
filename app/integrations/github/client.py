@@ -264,6 +264,7 @@ class GitHubClient:
                     "pushed_at": repo.pushed_at.isoformat() if repo.pushed_at else None,
                     "source_revision": source_revision,
                     "github_authenticated": self._is_authenticated,
+                    "private": bool(repo.private),
                     "package_json_detected": package_json is not None,
                     "readme_detected": bool(readme_text),
                     "screenshot_count": len(screenshots),

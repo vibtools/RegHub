@@ -33,6 +33,7 @@ class GitLabRepositoryData:
     language: str | None
     stars_count: int
     forks_count: int
+    private: bool
     root_files: frozenset[str]
     package_json: dict[str, Any] | None
     source_revision: str | None
@@ -213,6 +214,7 @@ class GitLabClient:
             language=language,
             stars_count=int(data.get("star_count") or 0),
             forks_count=int(data.get("forks_count") or 0),
+            private=str(data.get("visibility") or "private").casefold() != "public",
             root_files=root_files,
             package_json=package_json,
             source_revision=data.get("last_activity_at"),
@@ -230,6 +232,7 @@ class GitLabClient:
                 "owner_type": owner_type,
                 "owner_url": owner_url,
                 "gitlab_authenticated": self.is_authenticated,
+                "visibility": str(data.get("visibility") or "private").casefold(),
                 "screenshot_count": len(screenshots),
             },
         )

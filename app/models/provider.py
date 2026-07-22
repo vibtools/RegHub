@@ -9,8 +9,8 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 class Provider(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "providers"
 
-    name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
-    slug: Mapped[str] = mapped_column(String(140), unique=True, index=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    slug: Mapped[str] = mapped_column(String(140), unique=True)
     provider_type: Mapped[ProviderType] = mapped_column(
         Enum(ProviderType, native_enum=False, length=32), default=ProviderType.COMMUNITY
     )

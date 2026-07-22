@@ -2,7 +2,16 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, Enum, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import TemplateStatus
@@ -19,14 +28,20 @@ class Template(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_templates_catalog_quality", "status", "quality_score", "id"),
         Index("ix_templates_catalog_stars", "status", "stars_count", "id"),
         Index("ix_templates_topics_gin", "topics", postgresql_using="gin"),
+        CheckConstraint(
+            "quality_score >= 0 AND quality_score <= 100",
+            name="ck_templates_quality_score_range",
+        ),
+        CheckConstraint("stars_count >= 0", name="ck_templates_stars_nonnegative"),
+        CheckConstraint("forks_count >= 0", name="ck_templates_forks_nonnegative"),
     )
 
     name: Mapped[str] = mapped_column(String(160), index=True)
-    slug: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(180), unique=True)
     short_description: Mapped[str | None] = mapped_column(String(320))
     description: Mapped[str | None] = mapped_column(Text)
 
-    repository_url: Mapped[str] = mapped_column(String(500), unique=True, index=True)
+    repository_url: Mapped[str] = mapped_column(String(500), unique=True)
     repository_adapter: Mapped[str] = mapped_column(String(50), default="github", index=True)
     external_repository_id: Mapped[str | None] = mapped_column(String(160), unique=True)
     default_branch: Mapped[str] = mapped_column(String(255), default="main")

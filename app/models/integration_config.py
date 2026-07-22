@@ -11,7 +11,7 @@ from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 class IntegrationConfig(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "integration_configs"
 
-    slug: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(120), unique=True)
     name: Mapped[str] = mapped_column(String(160))
     integration_type: Mapped[str] = mapped_column(String(80), index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
